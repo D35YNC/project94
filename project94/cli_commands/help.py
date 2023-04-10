@@ -17,8 +17,9 @@ class Help(BaseCommand):
     def __call__(self, *args, **kwargs):
         if len(args) == 1:
             if cmd := self._app.commands.get(args[0]):
-                print(f"{'Command':<20}Description")
-                print(f"{str(cmd):<20}{cmd.description}")
+                kwargs.get("print_info_callback", lambda x: print(f"[!] {x}"))(f"Help: {cmd}")
+                print(f"Description: {cmd.description}")
+                print(f"Aliases: {', '.join(cmd.aliases)}.")
                 print(cmd.usage)
             else:
                 kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Command not found")
