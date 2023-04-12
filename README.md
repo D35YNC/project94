@@ -3,10 +3,6 @@
 ### Features
 - [X] Multiplying sessions using `select`
 - [X] SSL support + client certificate verify 
-- ~~[ ] TODO Support custom modules (idk why)~~
-- ~~[ ] TODO Support both reverse and bind shells~~
-- ~~[X] Cli interface commands autocompletion~~
-
 
 ### HOW TO USE
 ```bash
