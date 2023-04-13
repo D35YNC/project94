@@ -14,12 +14,9 @@ class Kill(BaseCommand):
 
     @property
     def usage(self) -> str:
-        return f"Usage: {self} SESSION_ID | SESSION_INDEX"
+        return f"Usage: {self} [SESSION_ID | SESSION_INDEX]"
 
     def __call__(self, *args, **kwargs):
-        if len(args) != 1:
-            kwargs.get("print_error_callback", lambda x: print(f"[!!!] {x}"))(self.usage)
-            return
         if not args[0] and self._app.active_session:
             self._app.active_session.kill()
         elif args[0] and (session_obj := self._app.find_session(id_=args[0], idx=args[0])):
