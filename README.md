@@ -58,4 +58,5 @@ Usage: /help [CMD]
 
 #### Demo
 
-/docs/demo.mp4
+![demo video](/assets/demo.mp4)
+
