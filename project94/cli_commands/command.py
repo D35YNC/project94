@@ -19,8 +19,8 @@ class Command(BaseCommand):
             kwargs.get("print_error_callback", lambda x: print(f"[!!!] {x}"))(self.usage)
             return
         if self._app.active_session:
-            if args[0]:
-                self._app.active_session.send_command(" ".join(args[0]))
+            if args:
+                self._app.active_session.send_command(" ".join(args))
             else:
                 kwargs.get("print_error_callback", lambda x: print(f"[!!!] {x}"))(self.usage)
         else:
