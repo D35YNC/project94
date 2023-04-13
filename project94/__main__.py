@@ -71,13 +71,15 @@ class Project94:
         th.start()
 
         while True:
-            if self.EXIT_FLAG:
-                break
             # I FUCKING HATE THIS TIMEOUT
             # TODO
             #  1. [ ] DO WHATEVER YOU WANT, BUT REMOVE hisith FUCKING TIMEOUT
             #  2. [X] ValueError when killin session and socket_fd == -1
             read_sockets, write_sockets, error_sockets = select.select(self.inputs, self.outputs, self.inputs, 0.5) # 0.25
+
+            if self.EXIT_FLAG:
+                break
+
             for socket_fd in read_sockets:
                 if socket_fd is self.master_socket:
                     self.handle_connection()
@@ -88,7 +90,6 @@ class Project94:
                         # When session is None then sessino killed manually
                         # Else session DO SUICIDE
                         if session:
-                            print("\r", end='')
                             Printer.warning(f"Session {session.rhost}:{session.rport} dead")
                             self.restore_prompt()
                             self.close_connection(session, False)
@@ -99,8 +100,7 @@ class Project94:
                     except (UnicodeDecodeError, UnicodeError):
                         Printer.error("Cant decode session output. Check&change encoding.")
                     else:
-                        if not session.is_interactive:
-                            print('\r', end='')
+                        if not session.interactive:
                             Printer.success(f"{session.rhost}:{session.rport}")
                             print(data, end='')
                             print(f"{'-' * 0x2A}")
@@ -118,7 +118,6 @@ class Project94:
                     try:
                         socket_fd.send(next_cmd.encode(session.encoding))
                     except (socket.error, OSError):
-                        print("\r", end='')
                         Printer.error(f"Cant send data to session {session.rhost}:{session.rport}")
                         self.restore_prompt()
                         self.close_connection(session)
@@ -128,7 +127,6 @@ class Project94:
             for socket_fd in error_sockets:
                 # MMMMM?
                 if socket_fd is self.master_socket:
-                    print()
                     Printer.error("MASTER ERROR")
                     self.shutdown()
                 if session := self.find_session(fd=socket_fd):
@@ -141,44 +139,58 @@ class Project94:
 
     def interface(self):
         # TODO
-        #  [ ] 1/DISABLING AUTOCOMPLETION IN INTERACTIVE MODE
+        #  [-] 1/DISABLING AUTOCOMPLETION IN INTERACTIVE MODE
+        #   Logic changed <it will not be fixed yet>
         #  [-] 2/FIX DELETION PROMPT WHEN DELETE SEMI-COMPLETED COMMAND
-        #  Partiladadry fixed. Context not dislpaying on autocompletion
+        #    Partiladadry fixed. Context not dislpaying on autocompletion
         #  [ ] 3/FIX <ENTER> PRESSING WHEN EXIT WITH NON EMPTY INPUT
+        #    it will not be fixed yet
         completer = CustomCompleter(list(self.commands.keys()))
         readline.set_completer_delims("\t")
         readline.set_completer(completer.complete)
         readline.parse_and_bind('tab: complete')
         readline.set_completion_display_matches_hook(completer.display_matches)
         while True:
-            if self.EXIT_FLAG:
+            try:
+                command = input(self.context)
+            except EOFError:
+                self.shutdown()
                 break
 
-            command = input(f"{self.context}>> ")
+            if self.EXIT_FLAG:
+                break
 
             if not command:
                 continue
 
             command = command.split(' ')
-            if command[0] not in self.commands:
-                cmd_found = False
-                # TODO CHECK PERFORMANCE
-                for cmd in self.commands:
-                    if cmd_found:
-                        break
-                    for alias in self.commands[cmd].aliases:
-                        if command[0] == alias:
-                            command[0] = cmd
-                            cmd_found = True
-                            break
-                if not cmd_found:
-                    Printer.error("Unknown command")
-                    continue
-            self.commands[command[0]](*command[1:],
-                                      print_success_callback=lambda x: Printer.success(x),
-                                      print_info_callback=lambda x: Printer.info(x),
-                                      print_warning_callback=lambda x: Printer.warning(x),
-                                      print_error_callback=lambda x: Printer.error(x))
+            if command[0] in self.commands:
+                # if command[0] not in self.commands:
+                # cmd_found = False
+                # # TODO CHECK PERFORMANCE
+                # for cmd in self.commands:
+                #     if cmd_found:
+                #         break
+                #     for alias in self.commands[cmd].aliases:
+                #         if command[0] == alias:
+                #             command[0] = cmd
+                #             cmd_found = True
+                #             break
+                # if not cmd_found:
+                #     Printer.error("Unknown command")
+                #     continue
+                self.commands[command[0]](*command[1:],
+                                          print_success_callback=lambda x: Printer.success(x),
+                                          print_info_callback=lambda x: Printer.info(x),
+                                          print_warning_callback=lambda x: Printer.warning(x),
+                                          print_error_callback=lambda x: Printer.error(x))
+            elif self.active_session and self.active_session.interactive:
+                if command[0] == "exit":
+                    self.active_session.interactive = False
+                else:
+                    self.active_session.send_command(" ".join(command))
+            else:
+                Printer.error("Unknown command")
 
     def handle_connection(self):
         session_socket, session_addr = self.master_socket.accept()
@@ -196,7 +208,6 @@ class Project94:
         if not self.allow_duplicate_sessions:
             for id_ in self.sessions:
                 if self.sessions[id_].rhost == session_addr[0]:
-                    print('\r', end='')
                     Printer.warning("Detect the same host connection, dropping...")
                     self.restore_prompt()
                     session_socket.shutdown(socket.SHUT_RDWR)
@@ -208,7 +219,6 @@ class Project94:
             time.sleep(1)
             recvall(session_socket)
 
-        print('\r', flush=True, end='')
         Printer.info(f"New session: {session_addr[0]}:{session_addr[1]}")
         self.restore_prompt()
 
@@ -222,7 +232,6 @@ class Project94:
         Gracefully close connection
         :param session: `Session` to close
         :param show_msg: Show a message that the session is closed
-        :return:
         """
         if self.active_session == session:
             self.active_session = None
@@ -269,9 +278,8 @@ class Project94:
     def restore_prompt(self):
         """
         Prints prompt message
-        :return:
         """
-        print(f"{self.context}>> ", end='', flush=True)
+        print(self.context, end='', flush=True)
 
     @property
     def context(self):
@@ -279,9 +287,12 @@ class Project94:
         :return:Current session context [rhost:rport]
         """
         if self.active_session:
-            return Printer.context(f"{self.active_session.rhost}:{self.active_session.rport}")
+            if self.active_session.interactive:
+                return ""
+            else:
+                return f"{Printer.context(f'{self.active_session.rhost}:{self.active_session.rport}')}>> "
         else:
-            return Printer.context("NO_SESSION")
+            return f"{Printer.context('NO_SESSION')}>> "
 
     # TODO NOTE ABOUT THIS CALLBACKS
 
@@ -301,8 +312,6 @@ class Project94:
     def shutdown(self, *args):
         """
         Gracefully exit
-        :param args:
-        :return:
         """
         Printer.warning("Exit...")
         self.EXIT_FLAG = True

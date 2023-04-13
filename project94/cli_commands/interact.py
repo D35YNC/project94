@@ -17,6 +17,6 @@ class Interact(BaseCommand):
     def __call__(self, *args, **kwargs):
         if self._app.active_session:
             kwargs.get("print_info_callback", lambda x: print(f"[*] {x}"))("Enter interactive mode...")
-            self._app.active_session.interact()
+            self._app.active_session.interactive = True
         else:
             kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Current session is FUCKING DEAD")
