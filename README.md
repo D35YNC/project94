@@ -58,5 +58,4 @@ Usage: /help [CMD]
 
 #### Demo
 
-![demo video](/assets/demo.mp4)
-
+https://user-images.githubusercontent.com/52525711/231819817-1844c3f3-333e-456a-bb63-9e4260f0ce48.mp4
