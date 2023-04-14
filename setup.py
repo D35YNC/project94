@@ -15,8 +15,7 @@ if __name__ == '__main__':
                        "Environment :: Console",
                        "License :: OSI Approved :: MIT License",
                        "Topic :: Security",
-                       "Programming Language :: Python :: 3.8",
-                       "Programming Language :: Python :: 3.9"
+                       "Programming Language :: Python"
                        "Programming Language :: Python :: 3.10"],
           python_requires=">=3.8",
           packages=find_packages(),
