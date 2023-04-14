@@ -1,8 +1,20 @@
 import readline
 
-class CustomCompleter:
+
+def _make_options(commands) -> list[str]:
+    r = []
+    for cmd in commands:
+        if commands[cmd].subcommands:
+            for subcmd in commands[cmd].subcommands:
+                r.append(f"{cmd} {subcmd} ")
+        else:
+            r.append(f"{cmd} ")
+    return r
+
+
+class CommandsCompleter:
     def __init__(self, options):
-        self.options = sorted(options)
+        self.options = sorted(_make_options(options))
         self.matches = []
 
     def complete(self, text, state):
