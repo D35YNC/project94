@@ -9,18 +9,22 @@
 - [X] Cli interface commands autocompletion
 
 ### Requirements
-- python3.8+
+- python3.10
 - requests (not necessary)
 
 ### TROLL TUTORIAL "HOW TO USE"
 **STEP 1** Installation  
 Use one of these methods:
 <!-- - `sudo pip3 install project94` -->
-- `git clone https://github.com/d35ync/project94.git` (xdd)
 - ```bash
   git clone https://github.com/d35ync/project94.git
   cd project94
-  sudo pip3 install .
+  ### Stable
+  git checkout v1.0
+  ### Unstable
+  git checkout dev
+  ### Or keep on master for 'pre-release'
+  sudo pip3 install .    
   ```
 
 **STEP 2** Run  
