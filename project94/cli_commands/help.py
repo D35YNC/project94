@@ -3,10 +3,6 @@ from .base_command import BaseCommand
 
 class Help(BaseCommand):
     @property
-    def aliases(self) -> list[str]:
-        return ["h", "help", "?"]
-
-    @property
     def description(self) -> str:
         return "display help message"
 
@@ -15,16 +11,15 @@ class Help(BaseCommand):
         return f"Usage: {self} [CMD]"
 
     def __call__(self, *args, **kwargs):
-        if len(args) == 1:
-            if cmd := self._app.commands.get(args[0]):
-                kwargs.get("print_info_callback", lambda x: print(f"[!] {x}"))(f"Help: {cmd}")
-                print(f"Description: {cmd.description}")
-                print(f"Aliases: {', '.join(cmd.aliases)}.")
-                print(cmd.usage)
-            else:
-                kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Command not found")
-                return
-        else:
-            for cmd in self._app.commands:
-                print(f"{cmd:<20}{self._app.commands[cmd].description}")
-        # print('-' * 0x2A)
+        match args:
+            case ("/help", cmd):
+                if cmd := self._app.commands.get(cmd):
+                    kwargs.get("print_info_callback", lambda x: print(f"[!] {x}"))(f"Help: {cmd}")
+                    print(f"Description: {cmd.description}")
+                    # print(f"Aliases: {', '.join(cmd.aliases)}.")
+                    print(cmd.usage)
+                else:
+                    kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))(f"Command {cmd} not found")
+            case _:
+                for cmd in self._app.commands:
+                    print(f"{cmd:<20}{self._app.commands[cmd].description}")

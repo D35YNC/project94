@@ -1,15 +1,12 @@
 from .base_command import BaseCommand
-from .command import Command
+from .cmd import Cmd
 from .encoding import Encoding
+from .exit import Exit
 from .goto import Goto
 from .help import Help
-from .info import Info
 from .interact import Interact
 from .kill import Kill
-from .multiply_command import MultiCommand
-from .sessions import Sessions
-from .exit import Exit
+from .show import Show
 
-__all__ = ["BaseCommand", "Command", "Encoding", "Goto",
-           "Help", "Exit", "Info", "Interact",
-           "Kill", "MultiCommand", "Sessions"]
+__all__ = ["BaseCommand", "Encoding", "Goto", "Help",
+           "Exit", "Interact", "Show", "Kill", "Cmd"]

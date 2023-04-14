@@ -3,10 +3,6 @@ from .base_command import BaseCommand
 
 class Interact(BaseCommand):
     @property
-    def aliases(self) -> list[str]:
-        return ["in", "interact"]
-
-    @property
     def description(self) -> str:
         return "start interactive shell"
 
