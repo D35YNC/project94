@@ -8,13 +8,13 @@ import time
 
 from .cli_commands import *
 from .session import Session
-from .utils import CustomCompleter
+from .utils import CommandsCompleter
 from .utils import Printer
 from .utils import recvall
 from .utils import get_banner
 
 
-__version__ = '1.0'
+__version__ = '1.1.beta'
 
 
 class Project94:
@@ -99,6 +99,7 @@ class Project94:
                         data = data.decode(session.encoding)
                     except (UnicodeDecodeError, UnicodeError):
                         Printer.error("Cant decode session output. Check&change encoding.")
+                        self.restore_prompt()
                     else:
                         if not session.interactive:
                             Printer.success(f"{session.rhost}:{session.rport}")
@@ -143,43 +144,30 @@ class Project94:
         #   Logic changed <it will not be fixed yet>
         #  [-] 2/FIX DELETION PROMPT WHEN DELETE SEMI-COMPLETED COMMAND
         #    Partiladadry fixed. Context not dislpaying on autocompletion
-        #  [ ] 3/FIX <ENTER> PRESSING WHEN EXIT WITH NON EMPTY INPUT
-        #    it will not be fixed yet
-        completer = CustomCompleter(list(self.commands.keys()))
+        #  [-] 3/FIX <ENTER> PRESSING WHEN EXIT WITH NON EMPTY INPUT
+        #    ? <it will not be fixed yet>
+        completer = CommandsCompleter(self.commands)
         readline.set_completer_delims("\t")
         readline.set_completer(completer.complete)
         readline.parse_and_bind('tab: complete')
         readline.set_completion_display_matches_hook(completer.display_matches)
         while True:
+            if self.EXIT_FLAG:
+                break
+
             try:
                 command = input(self.context)
             except EOFError:
                 self.shutdown()
                 break
 
-            if self.EXIT_FLAG:
-                break
-
+            command = command.strip()
             if not command:
                 continue
 
             command = command.split(' ')
             if command[0] in self.commands:
-                # if command[0] not in self.commands:
-                # cmd_found = False
-                # # TODO CHECK PERFORMANCE
-                # for cmd in self.commands:
-                #     if cmd_found:
-                #         break
-                #     for alias in self.commands[cmd].aliases:
-                #         if command[0] == alias:
-                #             command[0] = cmd
-                #             cmd_found = True
-                #             break
-                # if not cmd_found:
-                #     Printer.error("Unknown command")
-                #     continue
-                self.commands[command[0]](*command[1:],
+                self.commands[command[0]](*command,
                                           print_success_callback=lambda x: Printer.success(x),
                                           print_info_callback=lambda x: Printer.info(x),
                                           print_warning_callback=lambda x: Printer.warning(x),
@@ -263,8 +251,10 @@ class Project94:
             for id_ in self.sessions:
                 if self.sessions[id_].socket == fd:
                     return self.sessions[id_]
-        if id_ and id_ in self.sessions:
-            return self.sessions.get(id_)
+        if id_:
+            for h in self.sessions:
+                if h.startswith(id_):
+                    return self.sessions[h]
         if idx:
             if not isinstance(idx, int):
                 try:
