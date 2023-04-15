@@ -3,9 +3,8 @@
 
 ### Features
 - [X] Multiplying sessions using `select`
-- [X] SSL support + client certificate verify 
-- [ ] TODO Support custom modules (idk why)
-- [ ] TODO Support both reverse and bind shells
+- [X] SSL support + client certificate verify
+- [X] Support both reverse and bind shells
 - [X] Cli interface commands autocompletion
 
 ### Requirements
@@ -15,7 +14,7 @@
 ### TROLL TUTORIAL "HOW TO USE"
 **STEP 1** Installation  
 Use one of these methods:
-<!-- - `sudo pip3 install project94` -->
+- `sudo pip3 install project94`
 - ```bash
   git clone https://github.com/d35ync/project94.git
   cd project94
@@ -24,7 +23,11 @@ Use one of these methods:
   ### Unstable
   git checkout dev
   ### Or keep on master for 'pre-release'
-  sudo pip3 install .    
+  
+  # for install  
+  sudo pip3 install .
+  # or for run
+  python3 project94.py -V
   ```
 
 **STEP 2** Run  
@@ -35,31 +38,30 @@ Use one of these methods:
 EZ
 
 
-
 **CLI**  
 Default command set:
 ```
-/help               display help message
-/sessions           display sessions list
-/goto               switch to another session
-/info               display info about current session
+/show               displays information of specified type
 /interact           start interactive shell
-/encoding           changes current session encoding
-/command            execute single command in current session
-/multicommand       execute single command in all sessions
-/kill               kill active or specified session
 /exit               shutdown project94
+/help               display help message
+/bindshell          connects to bind shell
+/encoding           changes active session encoding
+/kill               kill active or specified session
+/goto               switch to another session
+/cmd                executes the command in the current or each session
 ```
 
 U can get extended help for every command:
 ```
->> /help /help
-[*] Help: /help
-Description: display help message
-Aliases: h, help, ?.
-Usage: /help [CMD]
+[NO_SESSION]>> /help /show
+[*] Help: /show
+Description: displays information of specified type
+sessions - shows list of sessions and information about them
+info     - shows information about active session
+Usage: /show {sessions, info}
 ```
 
-#### Demo
+### Demo
 
 https://user-images.githubusercontent.com/52525711/231819817-1844c3f3-333e-456a-bb63-9e4260f0ce48.mp4
