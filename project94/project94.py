@@ -16,7 +16,7 @@ from .utils import get_banner
 from .utils import recvall
 
 
-__version__ = '1.1.beta'
+__version__ = '1.1'
 __all__ = ["Project94", "entry", "__version__"]
 
 
@@ -333,7 +333,7 @@ def entry():
     parser = argparse.ArgumentParser()
     parser.add_argument("-V", "--version",
                         action='version',
-                        version=f"%(prog)s ver.{__version__}")
+                        version=f"%(prog)s ver{__version__}")
     parser.add_argument("-p", "--lport",
                         type=int,
                         metavar="PORT",
