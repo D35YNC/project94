@@ -1,3 +1,5 @@
+import importlib
+import os
 import readline
 import select
 import signal
@@ -6,12 +8,12 @@ import ssl
 import threading
 import time
 
-from .cli_commands import *
+from .cli_commands import base_command
 from .session import Session
 from .utils import CommandsCompleter
 from .utils import Printer
-from .utils import recvall
 from .utils import get_banner
+from .utils import recvall
 
 
 __version__ = '1.1.beta'
@@ -22,9 +24,22 @@ class Project94:
         self.EXIT_FLAG = False
 
         self.commands = {}
-        for cls in BaseCommand.__subclasses__():
+        for f in os.listdir(os.path.join(os.path.dirname(__file__), "cli_commands")):
+            if f.endswith(".py"):
+                mod = os.path.basename(f)[:-3]
+                if mod != "__init__" and mod != "base_command":
+                    try:
+                        importlib.import_module(f"project94.cli_commands.{mod}")
+                    except Exception as ex:
+                        Printer.error(f"Error while importing {mod}: {ex}")
+                    # TODO CHECK IS CORRECT WORKIN
+        for cls in base_command.BaseCommand.__subclasses__():
             cmd = cls(self)
-            self.commands[str(cmd)] = cmd
+            if cmd.name in self.commands:
+                Printer.error(f"Command {cmd.name} from \"{cmd.__module__}\" already exists.")
+                Printer.error(f"Imported from \"{self.commands[cmd.name].__module__}\"")
+            else:
+                self.commands[cmd.name] = cmd
 
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
@@ -82,7 +97,7 @@ class Project94:
 
             for socket_fd in read_sockets:
                 if socket_fd is self.master_socket:
-                    self.handle_connection()
+                    self.__accept_and_handle_connection()
                 else:
                     session = self.find_session(fd=socket_fd)
                     data = recvall(socket_fd)
@@ -180,9 +195,11 @@ class Project94:
             else:
                 Printer.error("Unknown command")
 
-    def handle_connection(self):
+    def __accept_and_handle_connection(self):
         session_socket, session_addr = self.master_socket.accept()
+        self.handle_connection(session_socket, session_addr)
 
+    def handle_connection(self, session_socket, session_addr):
         if self.ssl:
             try:
                 session_socket = self.ssl.wrap_socket(session_socket, True)
@@ -278,7 +295,7 @@ class Project94:
         """
         if self.active_session:
             if self.active_session.interactive:
-                return ""
+                return "\r"
             else:
                 return f"{Printer.context(f'{self.active_session.rhost}:{self.active_session.rport}')}>> "
         else:
