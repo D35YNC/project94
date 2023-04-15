@@ -24,7 +24,6 @@ class Show(BaseCommand):
         match args:
             case ("/show", "info",):
                 if self._app.active_session:
-                    print(f"{'-' * 0x2A}")
                     print(f"Hash: {self._app.active_session.session_hash}")
                     print(f"From: {self._app.active_session.rhost}:{self._app.active_session.rport}")
                     print(f"ASN: {self._app.active_session.asn} {self._app.active_session.asn_org}")
@@ -32,7 +31,6 @@ class Show(BaseCommand):
                           f"{self._app.active_session.city}")
                     print(f"TZ: {self._app.active_session.timezone}")
                     print(f"Encoding: {self._app.active_session.encoding}")
-                    # print(f"{'-' * 0x2A}")
                 else:
                     kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Current session is FUCKING DEAD")
 
