@@ -17,6 +17,7 @@ from .utils import recvall
 
 
 __version__ = '1.1.beta'
+__all__ = ["Project94", "entry", "__version__"]
 
 
 class Project94:
