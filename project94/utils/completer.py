@@ -3,12 +3,12 @@ import readline
 
 def _make_options(commands) -> list[str]:
     r = []
-    for cmd in commands:
-        if commands[cmd].subcommands:
-            for subcmd in commands[cmd].subcommands:
-                r.append(f"{cmd} {subcmd} ")
+    for cmd_name in commands:
+        if commands[cmd_name].subcommands:
+            for subcmd in commands[cmd_name].subcommands:
+                r.append(f"{cmd_name} {subcmd} ")
         else:
-            r.append(f"{cmd} ")
+            r.append(f"{cmd_name} ")
     return r
 
 
