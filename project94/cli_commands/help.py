@@ -3,27 +3,41 @@ from .base_command import BaseCommand
 
 class Help(BaseCommand):
     @property
-    def aliases(self) -> list[str]:
-        return ["h", "help", "?"]
-
-    @property
     def description(self) -> str:
         return "display help message"
 
     @property
+    def long_description(self):
+        return "\r IM A FUCKING PSYCHO\n" \
+               " ⠀⠀⠀⠀⠀⠀⣀⣀⣤⣤⣤⣤⣤⣤⣤⣤⣄⣀⣀⣀⣀⠀⠀⠀⠀⠀⠀⠀⠀\n" \
+               " ⠀⠀⠀⠀⣠⠞⠁⠀⡀⠄⣒⠨⠭⠭⠭⠉⢀⣒⣒⣚⠋⠙⢛⠶⣄⡀⠀⠀⠀\n" \
+               " ⠀⠀⠀⢰⠇⠀⠀⢎⠰⡱⣆⣉⣉⡉⠇⠀⠀⠀⠰⠶⠆⠰⢀⠀⠀⢹⡀⠀⠀\n" \
+               " ⠀⠀⢀⡞⠀⠀⠁⠢⠊⠱⢀⣀⣀⠠⠉⠢⠀⠀⢘⠠⠒⡒⢒⠒⡠⡘⣇⠀⠀\n" \
+               " ⢀⡴⠟⢒⣒⣂⡒⢇⠀⡀⠻⠿⠿⠂⡪⢤⠃⢤⣆⠰⠀⢴⣿⡦⢀⣘⢌⢳⡀\n" \
+               " ⡞⠈⣰⠋⠀⣎⡙⠋⠉⠂⠴⠤⠤⠅⠒⠁⠀⠀⢿⡲⠅⣠⣐⡢⡐⠺⢰⠡⡇\n" \
+               " ⣇⠀⢻⡐⠻⡏⠙⠲⣤⣀⡒⠒⠊⣟⢩⣤⡀⠀⠀⣹⡦⢀⠀⠀⣧⠠⣊⢴⠇\n" \
+               " ⠸⣎⠶⡀⠀⣿⣷⣀⣷⠈⠉⠿⢶⣏⣀⠀⠀⠰⡾⠁⠀⢀⣰⡿⣾⡏⢀⡏⠀\n" \
+               " ⠀⠘⢧⡀⠀⢸⣿⣿⣿⣷⣶⣤⣞⡀⠉⠉⡟⠛⢻⠛⠛⢹⠁⣟⣽⡇⢸⠀⠀\n" \
+               " ⠀⠀⠈⢧⠀⠸⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⠀⠀\n" \
+               " ⠀⠀⠀⠈⠳⣄⠻⡝⢻⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⢸⠀⠀\n" \
+               " ⠀⠀⠀⠀⢠⠏⠳⡝⢾⡃⠈⠙⢻⠿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⣿⠘⡇⠀\n" \
+               " ⠀⠀⠀⠀⣿⠀⠀⠸⡆⠹⣶⣀⡏⠀⠀⠀⡏⠉⠿⡿⠿⡿⢿⣏⣏⡏⠀⡇⠀\n" \
+               " ⠀⠀⠀⠀⢻⠀⠀⠀⠈⠢⣄⡙⠓⠶⠤⢤⣧⣀⣰⣃⣴⡧⠾⠶⠚⠀⡼⠁⠀\n" \
+               " ⠀⠀⠀⡴⠙⢖⠒⠢⢄⡀⠀⠉⠓⠲⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠴⠚⠁⠀⠀\n"
+
+    @property
     def usage(self) -> str:
-        return f"Usage: {self} [CMD]"
+        return f"Usage: {self.name} [CMD]"
 
     def __call__(self, *args, **kwargs):
-        if len(args) == 1:
-            if cmd := self._app.commands.get(args[0]):
-                print(f"{'Command':<20}Description")
-                print(f"{str(cmd):<20}{cmd.description}")
-                print(cmd.usage)
-            else:
-                kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Command not found")
-                return
-        else:
-            for cmd in self._app.commands:
-                print(f"{cmd:<20}{self._app.commands[cmd].description}")
-        # print('-' * 0x2A)
+        match args:
+            case ("/help", cmd_name):
+                if cmd := self._app.commands.get(cmd_name):
+                    kwargs.get("print_info_callback", lambda x: print(f"[!] {x}"))(f"Help: {cmd.name}")
+                    print(f"Description: {cmd.long_description}")
+                    print(cmd.usage)
+                else:
+                    kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))(f"Command {cmd_name} not found")
+            case _:
+                for cmd in self._app.commands:
+                    print(f"{cmd:<20}{self._app.commands[cmd].description}")

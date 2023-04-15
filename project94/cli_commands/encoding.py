@@ -2,28 +2,20 @@ from .base_command import BaseCommand
 
 
 class Encoding(BaseCommand):
-    __args_count = 1
-
-    @property
-    def aliases(self) -> list[str]:
-        return ["e", "encoding", "chenc"]
-
     @property
     def description(self) -> str:
-        return "changes current session encoding"
+        return "changes active session encoding"
 
     @property
     def usage(self) -> str:
-        return f"Usage: {self} NEW_ENCODING"
+        return f"Usage: {self.name} NEW_ENCODING"
 
     def __call__(self, *args, **kwargs):
-        if len(args) != self.__args_count:
+        if len(args) != 2:
             kwargs.get("print_error_callback", lambda x: print(f"[!!!] {x}"))(self.usage)
             return
         if self._app.active_session:
-            if args[0]:
-                self._app.active_session.encoding = args[0] or "utf-8"
-            else:
-                kwargs.get("print_error_callback", lambda x: print(f"[!!!] {x}"))(self.usage)
+            self._app.active_session.encoding = args[1]
+            kwargs.get("print_info_callback", lambda x: print(f"[*] {x}"))(f"Installed encoding: {self._app.active_session.encoding}")
         else:
             kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Current session is FUCKING DEAD")

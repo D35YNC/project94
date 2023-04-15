@@ -3,7 +3,7 @@ import socket
 import codecs
 import time
 
-from project94.utils import networking
+from .utils import networking
 
 
 class Session:
@@ -16,7 +16,7 @@ class Session:
         self._rhost, self._rport = socket_fd.getpeername()
         self._session_hash = networking.create_session_hash(self.rhost, self.rport)
         self._encoding = "utf-8"
-        self._interactive = False
+        self.interactive = False
         self._on_read = lambda _: None
         self._on_write = lambda _: None
         self._on_error = lambda _: None
@@ -71,10 +71,6 @@ class Session:
         return self._session_hash
 
     @property
-    def is_interactive(self):
-        return self._interactive
-
-    @property
     def encoding(self):
         return self._encoding
 
@@ -119,23 +115,10 @@ class Session:
         return None
 
     def send_command(self, command):
-        print(f"> \"{command}\" -> {self.rhost}:{self.rport}")
+        if not self.interactive:
+            print(f"> \"{command}\" -> {self.rhost}:{self.rport}")
         self._commands_queue.put_nowait(f"{command}\n")
         self._on_write(self)
-
-    def interact(self):
-        self._interactive = True
-        while True:
-            command = input()
-            if not command:
-                continue
-            elif command == "exit":
-                self._interactive = False
-                self._commands_queue.put_nowait("\n")
-                break
-            self._commands_queue.put_nowait(f"{command}\n")
-            self._on_write(self)
-            time.sleep(0.25)
 
     def rough_os_detection(self):
         cmd = 'cat /etc/*release | grep PRETTY_NAME | sed "s/PRETTY_NAME=//"\n\nsysteminfo\n'

@@ -6,25 +6,42 @@ class BaseCommand(abc.ABC):
         self._app = app
 
     @property
-    @abc.abstractmethod
-    def aliases(self) -> list[str]:
-        raise NotImplementedError()
+    def name(self) -> str:
+        """
+        :return: Command base name
+        """
+        return f"/{self.__class__.__name__.lower()}"
 
     @property
     @abc.abstractmethod
     def description(self) -> str:
+        """
+        :return: One line command description
+        """
         raise NotImplementedError()
+
+    @property
+    def long_description(self) -> str:
+        """
+        :return: Multiline command description
+        """
+        return self.description
 
     @property
     @abc.abstractmethod
     def usage(self) -> str:
+        """
+        :return: Usage string
+        """
         raise NotImplementedError()
+
+    @property
+    def subcommands(self) -> list[str]:
+        """
+        :return: List of subcommands
+        """
+        return []
 
     @abc.abstractmethod
     def __call__(self, *args, **kwargs):
         raise NotImplementedError()
-
-    def __str__(self) -> str:
-        return f"/{self.__class__.__name__.lower()}"
-
-

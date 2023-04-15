@@ -15,10 +15,9 @@ if __name__ == '__main__':
                        "Environment :: Console",
                        "License :: OSI Approved :: MIT License",
                        "Topic :: Security",
-                       "Programming Language :: Python :: 3.8",
-                       "Programming Language :: Python :: 3.9"
+                       "Programming Language :: Python",
                        "Programming Language :: Python :: 3.10"],
-          python_requires=">=3.8",
+          python_requires=">=3.10",
           packages=find_packages(),
           install_requires=[line.strip() for line in open("./requirements.txt", "r").readlines()],
           entry_points={'console_scripts': ['project94 = project94:entry']})
