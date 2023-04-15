@@ -1,5 +1,10 @@
 :trollface: Project94 is a fun software for trolling people.
 
+<div id="badges">
+  <img src="https://img.shields.io/pypi/v/project94" alt="Package version"/>
+  <img src="https://img.shields.io/pypi/pyversions/project94" alt="Python version"/>
+  <img src="https://img.shields.io/github/license/d35ync/project94" alt="License"/>
+</div>
 
 ### Features
 - [X] Multiplying sessions using `select`
@@ -19,17 +24,14 @@ Use one of these methods:
   git clone https://github.com/d35ync/project94.git
   cd project94
   ### Stable
-  git checkout v1.0
+  git checkout v1.1
   ### Unstable
   git checkout dev
   ### Or keep on master for 'pre-release'
   
-  # for install  
   sudo pip3 install .
-  # or for run
-  python3 project94.py -V
   ```
-
+  
 **STEP 2** Run  
 - pip installation: `project94 --help`
 - git installation: `python3 -m project94 -V` or `python3 project94.py -V`
@@ -38,7 +40,7 @@ Use one of these methods:
 EZ
 
 
-**CLI**  
+### CLI interface info
 Default command set:
 ```
 /show               displays information of specified type
@@ -64,4 +66,4 @@ Usage: /show {sessions, info}
 
 ### Demo
 
-https://user-images.githubusercontent.com/52525711/231819817-1844c3f3-333e-456a-bb63-9e4260f0ce48.mp4
+<!-- Demo v1.1 place here -->
