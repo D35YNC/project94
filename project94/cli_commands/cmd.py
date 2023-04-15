@@ -8,7 +8,7 @@ class Cmd(BaseCommand):
 
     @property
     def usage(self) -> str:
-        return f"Usage: {self} {{current, each}} CMDLINE"
+        return f"Usage: {self.name} {{current, each}} CMDLINE"
 
     @property
     def subcommands(self) -> list[str]:

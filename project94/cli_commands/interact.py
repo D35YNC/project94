@@ -7,8 +7,13 @@ class Interact(BaseCommand):
         return "start interactive shell"
 
     @property
+    def long_description(self):
+        return f"{self.description}\n" \
+               f"DO NOT USE KEYBOARD SHORTCUTS =)"
+
+    @property
     def usage(self) -> str:
-        return f"Usage: {self}"
+        return f"Usage: {self.name}"
 
     def __call__(self, *args, **kwargs):
         if self._app.active_session:

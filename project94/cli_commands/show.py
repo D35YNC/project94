@@ -3,19 +3,18 @@ from .base_command import BaseCommand
 
 class Show(BaseCommand):
     @property
-    def aliases(self) -> dict[str, str]:
-        return {
-            "/info": "/show info",
-            "/sessions": "/show sessions",
-        }
-
-    @property
-    def description(self) -> str:
+    def description(self):
         return "displays information of specified type"
 
     @property
+    def long_description(self) -> str:
+        return f"{self.description}\n" \
+               "sessions - shows list of sessions and information about them\n" \
+               "info     - shows information about active session"
+
+    @property
     def usage(self) -> str:
-        return f"Usage: {self} {{sessions, info}}"
+        return f"Usage: {self.name} {{sessions, info}}"
 
     @property
     def subcommands(self) -> list[str]:
@@ -42,8 +41,7 @@ class Show(BaseCommand):
                     kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("No online sessions")
                 else:
                     kwargs.get("print_info_callback", lambda x: print(f"[*] {x}"))("Listing online sessions...")
-                    kwargs.get("print_info_callback", lambda x: print(f"[*] {x}"))(
-                        f"{len(self._app.sessions)} sessions online")
+                    kwargs.get("print_info_callback", lambda x: print(f"[*] {x}"))(f"{len(self._app.sessions)} sessions online")
                     for id_ in self._app.sessions:
                         print(f"{'-' * 0x2A}")
                         print(f"Index: {list(self._app.sessions.keys()).index(id_)}")

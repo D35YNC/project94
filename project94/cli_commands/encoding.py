@@ -4,11 +4,11 @@ from .base_command import BaseCommand
 class Encoding(BaseCommand):
     @property
     def description(self) -> str:
-        return "changes current session encoding"
+        return "changes active session encoding"
 
     @property
     def usage(self) -> str:
-        return f"Usage: {self} NEW_ENCODING"
+        return f"Usage: {self.name} NEW_ENCODING"
 
     def __call__(self, *args, **kwargs):
         if len(args) != 2:

@@ -7,8 +7,13 @@ class Kill(BaseCommand):
         return "kill active or specified session"
 
     @property
+    def long_description(self):
+        return f"{self.description}\n" \
+               f"Specifying session works as in \"/goto\" command"
+
+    @property
     def usage(self) -> str:
-        return f"Usage: {self} [SESSION_ID | SESSION_INDEX]"
+        return f"Usage: {self.name} [SESSION_ID | SESSION_INDEX]"
 
     def __call__(self, *args, **kwargs):
         match args:
