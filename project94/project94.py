@@ -10,7 +10,6 @@ import time
 
 from .cli_commands import base_command
 from .session import Session
-from .context import Context
 from .utils import CommandsCompleter
 from .utils import Printer
 from .utils import get_banner
