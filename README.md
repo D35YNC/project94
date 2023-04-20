@@ -39,7 +39,6 @@ Use one of these methods:
 **STEP 3**  
 EZ
 
-
 ### CLI interface info
 Default command set:
 ```

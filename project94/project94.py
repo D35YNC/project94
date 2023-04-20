@@ -10,6 +10,7 @@ import time
 
 from .cli_commands import base_command
 from .session import Session
+from .context import Context
 from .utils import CommandsCompleter
 from .utils import Printer
 from .utils import get_banner
@@ -24,28 +25,11 @@ class Project94:
     def __init__(self, args):
         self.EXIT_FLAG = False
 
-        self.commands = {}
-        for f in os.listdir(os.path.join(os.path.dirname(__file__), "cli_commands")):
-            if f.endswith(".py"):
-                mod = os.path.basename(f)[:-3]
-                if mod != "__init__" and mod != "base_command":
-                    try:
-                        importlib.import_module(f"project94.cli_commands.{mod}")
-                    except Exception as ex:
-                        Printer.error(f"Error while importing {mod}: {ex}")
-                    # TODO CHECK IS CORRECT WORKIN
-        for cls in base_command.BaseCommand.__subclasses__():
-            cmd = cls(self)
-            if cmd.name in self.commands:
-                Printer.error(f"Command {cmd.name} from \"{cmd.__module__}\" already exists.")
-                Printer.error(f"Imported from \"{self.commands[cmd.name].__module__}\"")
-            else:
-                self.commands[cmd.name] = cmd
-
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
 
         Printer.colored = not args.disable_colors
+
         self.blackout = args.blackout
         self.suppress_banner = not args.show_banner
         self.allow_duplicate_sessions = args.allow_duplicates
@@ -56,6 +40,7 @@ class Project94:
         self.master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.master_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
+        self.commands = self.__load_commands()
         self.sessions: dict[str, Session] = {}
         self.active_session: Session = None
 
@@ -98,7 +83,8 @@ class Project94:
 
             for socket_fd in read_sockets:
                 if socket_fd is self.master_socket:
-                    self.__accept_and_handle_connection()
+                    session_socket, session_addr = self.master_socket.accept()
+                    self.handle_connection(session_socket, session_addr)
                 else:
                     session = self.find_session(fd=socket_fd)
                     data = recvall(socket_fd)
@@ -107,7 +93,7 @@ class Project94:
                         # Else session DO SUICIDE
                         if session:
                             Printer.warning(f"Session {session.rhost}:{session.rport} dead")
-                            self.restore_prompt()
+                            self.__restore_prompt()
                             self.close_connection(session, False)
                         continue
                         # break
@@ -115,13 +101,13 @@ class Project94:
                         data = data.decode(session.encoding)
                     except (UnicodeDecodeError, UnicodeError):
                         Printer.error("Cant decode session output. Check&change encoding.")
-                        self.restore_prompt()
+                        self.__restore_prompt()
                     else:
                         if not session.interactive:
                             Printer.success(f"{session.rhost}:{session.rport}")
                             print(data, end='')
-                            print(f"{'-' * 0x2A}")
-                            self.restore_prompt()
+                            print('-' * 0x2A)
+                            self.__restore_prompt()
                         else:
                             print(data, end='')
 
@@ -136,7 +122,7 @@ class Project94:
                         socket_fd.send(next_cmd.encode(session.encoding))
                     except (socket.error, OSError):
                         Printer.error(f"Cant send data to session {session.rhost}:{session.rport}")
-                        self.restore_prompt()
+                        self.__restore_prompt()
                         self.close_connection(session)
                 else:
                     self.outputs.remove(socket_fd)
@@ -196,11 +182,7 @@ class Project94:
             else:
                 Printer.error("Unknown command")
 
-    def __accept_and_handle_connection(self):
-        session_socket, session_addr = self.master_socket.accept()
-        self.handle_connection(session_socket, session_addr)
-
-    def handle_connection(self, session_socket, session_addr):
+    def handle_connection(self, session_socket: socket.socket, session_addr: tuple[str, int]):
         if self.ssl:
             try:
                 session_socket = self.ssl.wrap_socket(session_socket, True)
@@ -215,7 +197,7 @@ class Project94:
             for id_ in self.sessions:
                 if self.sessions[id_].rhost == session_addr[0]:
                     Printer.warning("Detect the same host connection, dropping...")
-                    self.restore_prompt()
+                    self.__restore_prompt()
                     session_socket.shutdown(socket.SHUT_RDWR)
                     session_socket.close()
                     return
@@ -226,7 +208,7 @@ class Project94:
             recvall(session_socket)
 
         Printer.info(f"New session: {session_addr[0]}:{session_addr[1]}")
-        self.restore_prompt()
+        self.__restore_prompt()
 
         self.inputs.append(session_socket)
         session = Session(session_socket, not self.blackout)
@@ -245,8 +227,6 @@ class Project94:
             self.inputs.remove(session.socket)
         if session.socket in self.outputs:
             self.outputs.remove(session.socket)
-        if session == self.active_session:
-            self.active_session = None
         try:
             session.socket.shutdown(socket.SHUT_RDWR)
             session.socket.close()
@@ -260,8 +240,8 @@ class Project94:
     def find_session(self, *, fd: socket.socket = None, id_: str = None, idx: int = None) -> [Session, None]:
         """
         Looking for session in `self.sessions` by criteria:
-        :param fd: search by socket
-        :param id_: search by id (session.session_hash)
+        :param fd: search by `session.socket`
+        :param id_: search by id `session.session_hash`
         :param idx: search by index in `self.sessions`
         :return: `Session` or `None`
         """
@@ -282,12 +262,6 @@ class Project94:
             if 0 <= idx < len(self.sessions):
                 return self.sessions.get(list(self.sessions.keys())[idx])
         return None
-
-    def restore_prompt(self):
-        """
-        Prints prompt message
-        """
-        print(self.context, end='', flush=True)
 
     @property
     def context(self):
@@ -318,13 +292,34 @@ class Project94:
         self.close_connection(session)
 
     def shutdown(self, *args):
-        """
-        Gracefully exit
-        """
+        """Gracefully exit"""
         Printer.warning("Exit...")
         self.EXIT_FLAG = True
         while 0 < len(self.sessions):
             self.close_connection(self.sessions[list(self.sessions.keys())[0]])
+
+    def __load_commands(self) -> dict[str, base_command.BaseCommand]:
+        for f in os.listdir(os.path.join(os.path.dirname(__file__), "cli_commands")):
+            if f.endswith(".py"):
+                mod = os.path.basename(f)[:-3]
+                if mod != "__init__" and mod != "base_command":
+                    try:
+                        importlib.import_module(f"project94.cli_commands.{mod}")
+                    except Exception as ex:
+                        Printer.error(f"Error while importing {mod}: {ex}")
+                    # TODO CHECK IS CORRECT WORKIN
+        r = {}
+        for cls in base_command.BaseCommand.__subclasses__():
+            cmd = cls(self)
+            if cmd.name in r:
+                Printer.error(f"Command {cmd.name} from \"{cmd.__module__}\" already exists.")
+                Printer.error(f"Imported from \"{r[cmd.name].__module__}\"")
+            else:
+                r[cmd.name] = cmd
+        return r
+
+    def __restore_prompt(self):
+        print(self.context, end='', flush=True)
 
 
 def entry():

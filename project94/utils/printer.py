@@ -53,29 +53,20 @@ class Printer:
         return '\033[4m' + line + '\033[0m'
 
     @staticmethod
-    def _print(line):
-        sys.stdout.write(line)
-        sys.stdout.flush()
-
-    @staticmethod
     def info(message: str):
-        Printer._print(f"\r[*] {Printer._light_purple(message) if Printer.colored else message}\n")
+        print(f"\r[*] {Printer._light_purple(message) if Printer.colored else message}", flush=True)
 
     @staticmethod
     def warning(message: str):
-        Printer._print(f"\r[!] {Printer._yellow(message) if Printer.colored else message}\n")
+        print(f"\r[!] {Printer._yellow(message) if Printer.colored else message}", flush=True)
 
     @staticmethod
     def error(message: str):
-        Printer._print(f"\r[!!!] {Printer._red(message) if Printer.colored else message}\r\n")
+        print(f"\r[!!!] {Printer._red(message) if Printer.colored else message}", flush=True)
 
     @staticmethod
     def success(message: str):
-        Printer._print(f"\r[+] {Printer._green(message) if Printer.colored else message}\n")
-
-    # @staticmethod
-    # def context(context: str):
-    #     Printer._print(f"\r[{Printer._gray(context) if Printer.colored else context}]")
+        print(f"\r[+] {Printer._green(message) if Printer.colored else message}", flush=True)
 
     @staticmethod
     def context(context: str):
