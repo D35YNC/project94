@@ -8,7 +8,7 @@ import ssl
 import threading
 import time
 
-from .cli_commands import base_command
+from .interface import base_command
 from .session import Session
 from .utils import CommandsCompleter
 from .utils import Printer
@@ -28,33 +28,31 @@ class Project94:
         signal.signal(signal.SIGTERM, self.shutdown)
 
         Printer.colored = not args.disable_colors
-
+        self.allow_duplicate_sessions = args.allow_duplicates
         self.blackout = args.blackout
         self.suppress_banner = not args.show_banner
-        self.allow_duplicate_sessions = args.allow_duplicates
-
         self.master_host = args.lhost
         self.master_port = args.lport
 
-        self.master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.master_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.__master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.__master_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 
         self.commands = self.__load_commands()
         self.sessions: dict[str, Session] = {}
         self.active_session: Session = None
 
-        self.inputs: list[socket.socket] = []
-        self.outputs: list[socket.socket] = []
+        self.__read_sockets: list[socket.socket] = []
+        self.__write_sockets: list[socket.socket] = []
 
         if args.keyfile and args.certfile:
             # TODO CHECK REVSHELL w\o ca (cert+key)
-            self.ssl = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=args.keyfile.name)
-            self.ssl.verify_mode = ssl.VerifyMode.CERT_REQUIRED
-            self.ssl.load_cert_chain(args.certfile.name)
-            self.ssl.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
+            self.__ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=args.keyfile.name)
+            self.__ssl_context.verify_mode = ssl.VerifyMode.CERT_REQUIRED
+            self.__ssl_context.load_cert_chain(args.certfile.name)
+            self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
             Printer.success("SSL ENABLED")
         else:
-            self.ssl = None
+            self.__ssl_context = None
             Printer.warning("SSL DISABLED")
 
     def main(self):
@@ -63,9 +61,9 @@ class Project94:
         if self.allow_duplicate_sessions:
             Printer.warning("Session duplicating enabled")
 
-        self.master_socket.bind((self.master_host, self.master_port))
-        self.master_socket.listen(0x10)
-        self.inputs.append(self.master_socket)
+        self.__master_socket.bind((self.master_host, self.master_port))
+        self.__master_socket.listen(0x10)
+        self.__read_sockets.append(self.__master_socket)
 
         th = threading.Thread(target=self.interface, daemon=True)
         th.start()
@@ -75,14 +73,14 @@ class Project94:
             # TODO
             #  1. [ ] DO WHATEVER YOU WANT, BUT REMOVE hisith FUCKING TIMEOUT
             #  2. [X] ValueError when killin session and socket_fd == -1
-            read_sockets, write_sockets, error_sockets = select.select(self.inputs, self.outputs, self.inputs, 0.5) # 0.25
+            read_sockets, write_sockets, error_sockets = select.select(self.__read_sockets, self.__write_sockets, self.__read_sockets, 0.5) # 0.25
 
             if self.EXIT_FLAG:
                 break
 
             for socket_fd in read_sockets:
-                if socket_fd is self.master_socket:
-                    session_socket, session_addr = self.master_socket.accept()
+                if socket_fd is self.__master_socket:
+                    session_socket, session_addr = self.__master_socket.accept()
                     self.handle_connection(session_socket, session_addr)
                 else:
                     session = self.find_session(fd=socket_fd)
@@ -113,8 +111,8 @@ class Project94:
             for socket_fd in write_sockets:
                 session = self.find_session(fd=socket_fd)
                 if not session:
-                    if socket_fd in self.outputs:
-                        self.outputs.remove(socket_fd)
+                    if socket_fd in self.__write_sockets:
+                        self.__write_sockets.remove(socket_fd)
                     continue
                 if next_cmd := session.next_command():
                     try:
@@ -124,19 +122,19 @@ class Project94:
                         self.__restore_prompt()
                         self.close_connection(session)
                 else:
-                    self.outputs.remove(socket_fd)
+                    self.__write_sockets.remove(socket_fd)
 
             for socket_fd in error_sockets:
                 # MMMMM?
-                if socket_fd is self.master_socket:
+                if socket_fd is self.__master_socket:
                     Printer.error("MASTER ERROR")
                     self.shutdown()
                 if session := self.find_session(fd=socket_fd):
                     self.close_connection(session)
 
         Printer.warning("Master exiting...")
-        self.master_socket.shutdown(socket.SHUT_RDWR)
-        self.master_socket.close()
+        self.__master_socket.shutdown(socket.SHUT_RDWR)
+        self.__master_socket.close()
         th.join()
 
     def interface(self):
@@ -182,9 +180,9 @@ class Project94:
                 Printer.error("Unknown command")
 
     def handle_connection(self, session_socket: socket.socket, session_addr: tuple[str, int]):
-        if self.ssl:
+        if self.__ssl_context:
             try:
-                session_socket = self.ssl.wrap_socket(session_socket, True)
+                session_socket = self.__ssl_context.wrap_socket(session_socket, True)
             except ssl.SSLCertVerificationError:
                 Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. Bad certificate")
                 return
@@ -209,9 +207,9 @@ class Project94:
         Printer.info(f"New session: {session_addr[0]}:{session_addr[1]}")
         self.__restore_prompt()
 
-        self.inputs.append(session_socket)
+        self.__read_sockets.append(session_socket)
         session = Session(session_socket, not self.blackout)
-        session.set_callbacks(self.read_callback, self.write_callback, self.error_callback)
+        session.set_callbacks(self.session_read_callback, self.session_write_callback, self.session_error_callback)
         self.sessions[session.session_hash] = session
 
     def close_connection(self, session: Session, show_msg: bool = True):
@@ -222,10 +220,10 @@ class Project94:
         """
         if self.active_session == session:
             self.active_session = None
-        if session.socket in self.inputs:
-            self.inputs.remove(session.socket)
-        if session.socket in self.outputs:
-            self.outputs.remove(session.socket)
+        if session.socket in self.__read_sockets:
+            self.__read_sockets.remove(session.socket)
+        if session.socket in self.__write_sockets:
+            self.__write_sockets.remove(session.socket)
         try:
             session.socket.shutdown(socket.SHUT_RDWR)
             session.socket.close()
@@ -277,17 +275,17 @@ class Project94:
 
     # TODO NOTE ABOUT THIS CALLBACKS
 
-    def read_callback(self, session: Session):
-        if session.socket in self.inputs:
-            self.inputs.remove(session.socket)
+    def session_read_callback(self, session: Session):
+        if session.socket in self.__read_sockets:
+            self.__read_sockets.remove(session.socket)
         else:
-            self.inputs.append(session.socket)
+            self.__read_sockets.append(session.socket)
 
-    def write_callback(self, session: Session):
-        if session.socket not in self.outputs:
-            self.outputs.append(session.socket)
+    def session_write_callback(self, session: Session):
+        if session.socket not in self.__write_sockets:
+            self.__write_sockets.append(session.socket)
 
-    def error_callback(self, session: Session):
+    def session_error_callback(self, session: Session):
         self.close_connection(session)
 
     def shutdown(self, *args):
@@ -298,12 +296,12 @@ class Project94:
             self.close_connection(self.sessions[list(self.sessions.keys())[0]])
 
     def __load_commands(self) -> dict[str, base_command.BaseCommand]:
-        for f in os.listdir(os.path.join(os.path.dirname(__file__), "cli_commands")):
+        for f in os.listdir(os.path.join(os.path.dirname(__file__), "interface")):
             if f.endswith(".py"):
                 mod = os.path.basename(f)[:-3]
                 if mod != "__init__" and mod != "base_command":
                     try:
-                        importlib.import_module(f"project94.cli_commands.{mod}")
+                        importlib.import_module(f"project94.interface.{mod}")
                     except Exception as ex:
                         Printer.error(f"Error while importing {mod}: {ex}")
                     # TODO CHECK IS CORRECT WORKIN
