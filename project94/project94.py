@@ -28,9 +28,8 @@ class Project94:
         signal.signal(signal.SIGTERM, self.shutdown)
 
         Printer.colored = not args.disable_colors
-        self.allow_duplicate_sessions = args.allow_duplicates
-        self.blackout = args.blackout
-        self.suppress_banner = not args.show_banner
+        self.sessions_drop_duplicates = args.drop_duplicates
+        self.sessions_show_banner = args.show_banner
         self.master_host = args.lhost
         self.master_port = args.lport
 
@@ -61,14 +60,22 @@ class Project94:
         for mod in self.modules:
             mod.on_master_ready()
 
-        Printer.info(f"Listening: {self.master_host}:{self.master_port}")
+        print("Startup options:")
+        if self.sessions_drop_duplicates:
+            Printer.warning("- Duplicates dropping enabled")
+        else:
+            Printer.info("- Duplicates dropping disabled")
 
-        if self.allow_duplicate_sessions:
-            Printer.warning("Session duplicating enabled")
+        if self.sessions_show_banner:
+            Printer.info("- Banners suppressing disabled")
+        else:
+            Printer.warning("- Banners suppressing enabled")
 
         self.__master_socket.bind((self.master_host, self.master_port))
         self.__master_socket.listen(0x10)
         self.__read_sockets.append(self.__master_socket)
+
+        Printer.info(f"Listening: {self.master_host}:{self.master_port}")
 
         th = threading.Thread(target=self.interface, daemon=True)
         th.start()
@@ -197,7 +204,7 @@ class Project94:
                 Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}")
                 return
 
-        if not self.allow_duplicate_sessions:
+        if self.sessions_drop_duplicates:
             for id_ in self.sessions:
                 if self.sessions[id_].rhost == session_addr[0]:
                     Printer.warning("Detect the same host connection, dropping...")
@@ -206,7 +213,7 @@ class Project94:
                     session_socket.close()
                     return
 
-        if self.suppress_banner:
+        if not self.sessions_show_banner:
             session_socket.send("pwd\n".encode())
             time.sleep(1)
             recvall(session_socket)
@@ -220,7 +227,7 @@ class Project94:
         self.sessions[session.session_hash] = session
 
         for mod in self.modules:
-            mod.on_session_ready(session, blackout=self.blackout)
+            mod.on_session_ready(session)
 
     def close_connection(self, session: Session, show_msg: bool = True):
         """
@@ -349,6 +356,11 @@ def entry():
     parser.add_argument("-V", "--version",
                         action='version',
                         version=f"%(prog)s ver{__version__}")
+    parser.add_argument("-i", "--lhost",
+                        type=str,
+                        metavar="HOST",
+                        help="Host to listen",
+                        default="0.0.0.0")
     parser.add_argument("-p", "--lport",
                         type=int,
                         metavar="PORT",
@@ -357,11 +369,6 @@ def entry():
     parser.add_argument("-k", "--keyfile",
                         type=argparse.FileType(mode='r'),
                         help="keyfile for ssl")
-    parser.add_argument("-H", "--lhost",
-                        type=str,
-                        metavar="HOST",
-                        help="Host to listen",
-                        default="0.0.0.0")
     parser.add_argument("-c", "--certfile",
                         type=argparse.FileType(mode='r'),
                         help="certfile for ssl")
@@ -369,22 +376,14 @@ def entry():
                         action="store_true",
                         help="disable colored output",
                         default=False)
-    parser.add_argument("--blackout",
-                        action="store_true",
-                        help="dont try query info about sessions ip addresses",
-                        default=False)
     parser.add_argument("--show-banner-pls",
                         dest="show_banner",
                         action="store_true",
                         help="dont suppress banners for new sessions",
                         default=False)
-    # parser.add_argument("--silent",
-    #                     action="store_true",
-    #                     help="dont try automatic detect os",
-    #                     default=False)
-    parser.add_argument("--allow-duplicates",
+    parser.add_argument("--drop-duplicates",
                         action="store_true",
-                        help="allow duplicating sessions from same ip",
+                        help="disable duplicating sessions from same ip",
                         default=False)
     a = parser.parse_args()
 
