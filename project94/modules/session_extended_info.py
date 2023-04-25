@@ -35,8 +35,15 @@ class SessionExtendedInfo(Module):
                 session = app.get_session(id_=sesion_id, idx=sesion_id)
                 self.__detect_os(session)
                 Printer.info(session.extended_info.get("OS"))
-            case ("software", *arg):
-                pass
+            case ("software", soft):
+                if app.active_session:
+                    r = self.__detect_software(app.active_seesion, soft)
+                    if r:
+                        kwargs.get("print_success_callback", lambda x: print(f"[+] {x}"))(f"{soft} is present")
+                    else:
+                        kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))(f"{soft} is missing")
+                else:
+                    kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Current session is FUCKING DEAD")
             case _:
                 kwargs.get("print_error_callback", lambda x: print(f"[!!!] {x}"))(kwargs.get("command").usage)
 
