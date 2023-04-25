@@ -7,10 +7,10 @@
 </div>
 
 ### Features
-- [X] Multiplying sessions using `select`
+- [X] Multiplying sessions
 - [X] SSL support + client certificate verify
-- [X] Support both reverse and bind shells
-- [X] Cli interface commands autocompletion
+- [X] Supports both reverse and bind shells
+- [X] Auto-completion of interactive interface commands
 
 ### Requirements
 - python3.10
@@ -30,6 +30,8 @@ Use one of these methods:
   ### Or keep on master for 'pre-release'
   
   sudo pip3 install .
+  ### or just for run
+  python3 project94.py -h
   ```
   
 **STEP 2** Run  
