@@ -8,7 +8,7 @@ import ssl
 import threading
 import time
 
-from .interface import base_command
+from .modules.module_base import Module, Command
 from .session import Session
 from .utils import CommandsCompleter
 from .utils import Printer
@@ -34,13 +34,15 @@ class Project94:
         self.master_host = args.lhost
         self.master_port = args.lport
 
+        self.active_session: Session = None
+        self.sessions: dict[str, Session] = {}
+        self.modules: list[Module] = []
+        self.commands: dict[str, Command] = {}
+
+        self.__load_modules()
+
         self.__master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.__master_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-
-        self.commands = self.__load_commands()
-        self.sessions: dict[str, Session] = {}
-        self.active_session: Session = None
-
         self.__read_sockets: list[socket.socket] = []
         self.__write_sockets: list[socket.socket] = []
 
@@ -56,6 +58,9 @@ class Project94:
             Printer.warning("SSL DISABLED")
 
     def main(self):
+        for mod in self.modules:
+            mod.on_master_ready()
+
         Printer.info(f"Listening: {self.master_host}:{self.master_port}")
 
         if self.allow_duplicate_sessions:
@@ -83,7 +88,7 @@ class Project94:
                     session_socket, session_addr = self.__master_socket.accept()
                     self.handle_connection(session_socket, session_addr)
                 else:
-                    session = self.find_session(fd=socket_fd)
+                    session = self.get_session(fd=socket_fd)
                     data = recvall(socket_fd)
                     if not data:
                         # When session is None then sessino killed manually
@@ -109,7 +114,7 @@ class Project94:
                             print(data, end='')
 
             for socket_fd in write_sockets:
-                session = self.find_session(fd=socket_fd)
+                session = self.get_session(fd=socket_fd)
                 if not session:
                     if socket_fd in self.__write_sockets:
                         self.__write_sockets.remove(socket_fd)
@@ -129,7 +134,8 @@ class Project94:
                 if socket_fd is self.__master_socket:
                     Printer.error("MASTER ERROR")
                     self.shutdown()
-                if session := self.find_session(fd=socket_fd):
+                    break
+                if session := self.get_session(fd=socket_fd):
                     self.close_connection(session)
 
         Printer.warning("Master exiting...")
@@ -165,17 +171,18 @@ class Project94:
                 continue
 
             command = command.split(' ')
-            if command[0] in self.commands:
-                self.commands[command[0]](*command,
-                                          print_success_callback=lambda x: Printer.success(x),
-                                          print_info_callback=lambda x: Printer.info(x),
-                                          print_warning_callback=lambda x: Printer.warning(x),
-                                          print_error_callback=lambda x: Printer.error(x))
-            elif self.active_session and self.active_session.interactive:
+            if self.active_session and self.active_session.interactive:
                 if command[0] == "exit":
                     self.active_session.interactive = False
                 else:
                     self.active_session.send_command(" ".join(command))
+            elif command[0] in self.commands:
+                self.commands[command[0]](*command,
+                                          app=self,
+                                          print_success_callback=lambda x: Printer.success(x),
+                                          print_info_callback=lambda x: Printer.info(x),
+                                          print_warning_callback=lambda x: Printer.warning(x),
+                                          print_error_callback=lambda x: Printer.error(x))
             else:
                 Printer.error("Unknown command")
 
@@ -208,9 +215,12 @@ class Project94:
         self.__restore_prompt()
 
         self.__read_sockets.append(session_socket)
-        session = Session(session_socket, not self.blackout)
+        session = Session(session_socket)
         session.set_callbacks(self.session_read_callback, self.session_write_callback, self.session_error_callback)
         self.sessions[session.session_hash] = session
+
+        for mod in self.modules:
+            mod.on_session_ready(session, blackout=self.blackout)
 
     def close_connection(self, session: Session, show_msg: bool = True):
         """
@@ -218,6 +228,10 @@ class Project94:
         :param session: `Session` to close
         :param show_msg: Show a message that the session is closed
         """
+        for mod in self.modules:
+            mod.on_session_dead(session)
+        if show_msg:
+            Printer.warning(f"Session {session.rhost}:{session.rport} killed")
         if self.active_session == session:
             self.active_session = None
         if session.socket in self.__read_sockets:
@@ -231,10 +245,8 @@ class Project94:
             pass
         if session.session_hash in self.sessions:
             self.sessions.pop(session.session_hash)
-        if show_msg:
-            Printer.warning(f"Session {session.rhost}:{session.rport} killed")
 
-    def find_session(self, *, fd: socket.socket = None, id_: str = None, idx: int = None) -> [Session, None]:
+    def get_session(self, *, fd: socket.socket = None, id_: str = None, idx: int = None) -> [Session, None]:
         """
         Looking for session in `self.sessions` by criteria:
         :param fd: search by `session.socket`
@@ -292,28 +304,39 @@ class Project94:
         """Gracefully exit"""
         Printer.warning("Exit...")
         self.EXIT_FLAG = True
+        for mod in self.modules:
+            mod.on_master_dead()
         while 0 < len(self.sessions):
             self.close_connection(self.sessions[list(self.sessions.keys())[0]])
 
-    def __load_commands(self) -> dict[str, base_command.BaseCommand]:
-        for f in os.listdir(os.path.join(os.path.dirname(__file__), "interface")):
+    def __load_modules(self):
+        for f in os.listdir(os.path.join(os.path.dirname(__file__), "modules")):
             if f.endswith(".py"):
                 mod = os.path.basename(f)[:-3]
-                if mod != "__init__" and mod != "base_command":
+                if mod not in ["module_base", "__init__"]:
                     try:
-                        importlib.import_module(f"project94.interface.{mod}")
+                        importlib.import_module(f"project94.modules.{mod}")
                     except Exception as ex:
                         Printer.error(f"Error while importing {mod}: {ex}")
                     # TODO CHECK IS CORRECT WORKIN
-        r = {}
-        for cls in base_command.BaseCommand.__subclasses__():
-            cmd = cls(self)
-            if cmd.name in r:
-                Printer.error(f"Command {cmd.name} from \"{cmd.__module__}\" already exists.")
-                Printer.error(f"Imported from \"{r[cmd.name].__module__}\"")
+        for cls in Module.__subclasses__():
+            mod = cls(self)
+            if mod in self.modules:
+                Printer.error(f"Module {mod.name} from {mod.__module__} already imported from {self.modules.index(mod).__module__}")
             else:
-                r[cmd.name] = cmd
-        return r
+                self.modules.append(mod)
+
+        for mod in self.modules:
+            mod_load_succ = True
+            mod_commands = mod.get_commands()
+            for cmd in mod_commands:
+                if cmd in self.commands:
+                    Printer.error(f"Command {cmd} from \"{mod.name}\" ({mod_commands[cmd].module.__module__}) already imported from \"{self.commands[cmd].module.name}\" ({self.commands[cmd].module.__module__})")
+                    mod_load_succ = False
+                else:
+                    self.commands[cmd] = mod_commands[cmd]
+            if mod_load_succ:
+                Printer.success(f"{mod.name} loaded")
 
     def __restore_prompt(self):
         print(self.context, end='', flush=True)
