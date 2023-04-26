@@ -105,7 +105,6 @@ class Project94:
                             self.__restore_prompt()
                             self.close_connection(session, False)
                         continue
-                        # break
                     try:
                         data = data.decode(session.encoding)
                     except (UnicodeDecodeError, UnicodeError):
@@ -327,16 +326,23 @@ class Project94:
                         Printer.error(f"Error while importing {mod}: {ex}")
                     # TODO CHECK IS CORRECT WORKIN
         for cls in Module.__subclasses__():
-            mod = cls(self)
-            if mod in self.modules:
-                Printer.error(f"Module {mod.name} from {mod.__module__} already imported from {self.modules.index(mod).__module__}")
+            try:
+                mod = cls(self)
+            except Exception as ex:
+                Printer.error(f"Error while loading mudule {cls.__name__}: {ex}")
+                continue
             else:
-                self.modules.append(mod)
+                if mod in self.modules:
+                    Printer.error(f"Module {mod.name} from {mod.__module__} already imported from {self.modules.index(mod).__module__}")
+                else:
+                    self.modules.append(mod)
 
         for mod in self.modules:
             mod_load_succ = True
             mod_commands = mod.get_commands()
             for cmd in mod_commands:
+                if mod_commands[cmd].is_subcommand:
+                    continue
                 if cmd in self.commands:
                     Printer.error(f"Command {cmd} from \"{mod.name}\" ({mod_commands[cmd].module.__module__}) already imported from \"{self.commands[cmd].module.name}\" ({self.commands[cmd].module.__module__})")
                     mod_load_succ = False

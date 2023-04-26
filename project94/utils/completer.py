@@ -6,7 +6,7 @@ def _make_options(commands) -> list[str]:
     for cmd_name in commands:
         if commands[cmd_name].subcommands:
             for subcmd in commands[cmd_name].subcommands:
-                r.append(f"{cmd_name} {subcmd} ")
+                r.append(f"{cmd_name} {subcmd.name} ")
         else:
             r.append(f"{cmd_name} ")
     return r

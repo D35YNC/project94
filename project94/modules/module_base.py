@@ -1,67 +1,61 @@
 import abc
+import inspect
 
 
-def command(*, name: str = None, description: str = None):
+def command(*, name: str = None, description: str = None, long_description: str = None):
     def wrapper(func):
-        return Command(func, name, description)
-    return wrapper
-
-
-def long_description(content: str):
-    def wrapper(cmd):
-        if isinstance(cmd, Command):
-            cmd._set_long_description(content)
-        else:
-            cmd.__project94_command_long_description = content
-        return cmd
-    return wrapper
-
-
-def subcommands(*options):
-    def wrapper(cmd):
-        if 0 < len(options):
-            r = [str(x) for x in options]
-            if isinstance(cmd, Command):
-                cmd._set_subcommands(r)
-                cmd._update_usage_string()
-            else:
-                cmd.__project94_command_subcommands = r
-        return cmd
-    return wrapper
-
-
-def params(**options):
-    def wrapper(cmd):
-        if 0 < len(options):
-            r = {}
-            for opt in options:
-                if options[opt]:
-                    r[opt] = True
-                else:
-                    r[opt] = False
-            if isinstance(cmd, Command):
-                cmd._set_args(r)
-                cmd._update_usage_string()
-            else:
-                cmd.__project94_command_params = r
-
-        return cmd
+        return Command(func=func, name=name, description=description, long_description=long_description)
     return wrapper
 
 
 class Command:
-    def __init__(self, func, name: str = "", description: str = ""):
-        self.__func = func
+    def __init__(self, parent=None, func: callable = None, name: str = "", description: str = "", long_description: str = ""):
+        self.__parent = parent
+        self.__func = func if func else lambda *args, **kwargs: print(f"Usage: {self.usage}")
         self.__name = name.lower() if name else func.__name__.lower()
         self.__description = description if description else func.__doc__
-        self.__long_description = getattr(func, "__project94_command_long_description") if hasattr(func, "__project94_command_long_description") else func.__doc__
+        self.__long_description = long_description if long_description else description
         self.__usage = ""
-        self.__subcommands = getattr(func, "__project94_command_subcommands") if hasattr(func, "__project94_command_subcommands") else []
-        self.__args = getattr(func, "__project94_command_params") if hasattr(func, "__project94_command_params") else {}
+        self.__subcommands = []
+        self.__args = {}
+        self.__args_required_count = 0
+        self.__unlimited_args = False
+
+        func_info = inspect.getfullargspec(self.__func)
+        params = func_info.args or []
+        defaults = func_info.defaults or []
+        for param in params:
+            if param == "self":
+                continue
+            if len(params) - params.index(param) <= len(defaults):
+                self.__args[param.upper()] = defaults[params.index(param) - len(params)]
+            else:
+                self.__args[param.upper()] = None
+
+        if func_info.varargs:
+            self.__args[func_info.varargs.upper()] = None
+            self.__unlimited_args = True
+
         self._update_usage_string()
 
     def __call__(self, *args, **kwargs):
-        self.__func(*args, command=self, **kwargs)
+        if self.has_subcommands and 1 < len(args):
+            for subcmd in self.__subcommands:
+                if args[0] == self.name and args[1] == subcmd.name:
+                    if subcmd.required_args_count <= len(args[2:]) <= subcmd.args_count or subcmd.args_count == -1:
+                        subcmd(*(args[2:]), **kwargs)
+                    else:
+                        print(f"Use: ", subcmd.usage)
+                    return
+
+        if 0 == len(args) == self.args_count:
+            self.__func(self, **kwargs)
+        elif (self.required_args_count <= len(args) <= self.args_count or self.args_count == -1) and self.is_subcommand:
+            self.__func(self, *args, **kwargs)
+        elif (self.required_args_count <= len(args) - 1 <= self.args_count or self.args_count == -1) and not self.is_subcommand:
+            self.__func(self, *args[1:], **kwargs)
+        else:
+            print("Use:", self.usage)
 
     @property
     def module(self):
@@ -84,27 +78,53 @@ class Command:
         return self.__long_description
 
     @property
+    def parent(self):
+        return self.__parent
+
+    @property
+    def is_subcommand(self):
+        return self.__parent is not None
+
+    @property
+    def has_subcommands(self):
+        return len(self.__subcommands) > 0
+
+    @property
     def subcommands(self):
         return self.__subcommands
 
+    def subcommand(self, name=None, description=None):
+        def wrapper(func):
+            c = Command(self, func, name, description)
+            self.__subcommands.append(c)
+            self._update_usage_string()
+            return c
+        return wrapper
+
+    @property
+    def args_count(self):
+        return len(self.__args) if not self.__unlimited_args else -1
+
+    @property
+    def required_args_count(self):
+        return self.__args_required_count
+
     def _update_usage_string(self):
-        self.__usage = f"Usage: {self.__name}"
-        if self.__subcommands:
-            self.__usage += f" {{{' '.join(self.__subcommands)}}}"
+        self.__usage = ""
+        if self.is_subcommand:
+            self.__usage += f" {self.__parent.name}"
+
+        self.__usage += f" {self.__name}"
+
+        if self.has_subcommands:
+            self.__usage += f" {{{' '.join(subcmd.name for subcmd in self.__subcommands)}}}"
+
         if self.__args:
-            if not_required := [arg for arg in self.__args if not self.__args[arg]]:
+            if not_required := [arg for arg in self.__args if self.__args[arg] is not None]:
                 self.__usage += f" [{' '.join(not_required)}]"
-            if required := [arg for arg in self.__args if self.__args[arg]]:
+            if required := [arg for arg in self.__args if self.__args[arg] is None]:
                 self.__usage += f" {' '.join(required)}"
-
-    def _set_subcommands(self, value):
-        self.__subcommands = value
-
-    def _set_args(self, value):
-        self.__args = value
-
-    def _set_long_description(self, value):
-        self.__long_description = value
+                self.__args_required_count = len(required)
 
 
 class Module(abc.ABC):

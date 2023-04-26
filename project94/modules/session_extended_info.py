@@ -1,11 +1,15 @@
 import requests
 
 from .module_base import *
-from ..utils import networking
 from ..utils import Printer
+from ..utils import networking
 
 
 class SessionExtendedInfo(Module):
+    detect = Command(name="detect", description="detecting some info in session")
+    def __init__(self, app):
+        super().__init__(app)
+        raise NotImplementedError("Module cant be loaded because contains errors")
     def on_session_ready(self, *args, **kwargs):
         session = args[0]
         self.__detect_os(session)
@@ -17,35 +21,36 @@ class SessionExtendedInfo(Module):
         session.extended_info["Location"] = f'{api_info.get("country", "Unknown")} {api_info.get("region_name", "Unknown")} {api_info.get("city", "Unknown")}'
         session.extended_info["TZ"] = api_info.get("time_zone", "Unknown")
 
-    @command(name="detect", description="detecting some info in session")
-    @subcommands("os", "software")
-    def detect(self, *args, **kwargs):
+    @detect.subcommand(name="os", description="automatic detecting os")
+    def detect_os(self, session_id: str = "", **kwargs):
         app = kwargs.get("app")
-        match args:
-            case ("os",):
-                if app.active_session:
-                    if os := app.active_session.extended_info.get("OS"):
-                        Printer.info(os)
-                    else:
-                        self.__detect_os(app.active_session)
-                        Printer.info(app.active_session.extended_info.get("OS"))
-                else:
-                    kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Current session is FUCKING DEAD")
-            case ("os", sesion_id):
-                session = app.get_session(id_=sesion_id, idx=sesion_id)
-                self.__detect_os(session)
-                Printer.info(session.extended_info.get("OS"))
-            case ("software", soft):
-                if app.active_session:
-                    r = self.__detect_software(app.active_seesion, soft)
-                    if r:
-                        kwargs.get("print_success_callback", lambda x: print(f"[+] {x}"))(f"{soft} is present")
-                    else:
-                        kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))(f"{soft} is missing")
-                else:
-                    kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Current session is FUCKING DEAD")
-            case _:
-                kwargs.get("print_error_callback", lambda x: print(f"[!!!] {x}"))(kwargs.get("command").usage)
+        if session_id and (session := app.get_session(id_=session_id, idx=session_id)):
+            self.__detect_os(session)
+            Printer.info(session.extended_info.get("OS"))
+        else:
+            Printer.warning(f"Cant find session {session_id}")
+            return
+
+        if app.active_session:
+            if os := app.active_session.extended_info.get("OS"):
+                Printer.info(os)
+            else:
+                self.__detect_os(app.active_session)
+                Printer.info(app.active_session.extended_info.get("OS"))
+        else:
+            kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Current session is FUCKING DEAD")
+
+    @detect.subcommand(name="software", description="automatic detecting software in PATH")
+    def detect_software(self, soft: str, **kwargs):
+        app = kwargs.get("app")
+        if app.active_session:
+            r = self.__detect_software(app.active_seesion, soft)
+            if r:
+                kwargs.get("print_success_callback", lambda x: print(f"[+] {x}"))(f"{soft} is present")
+            else:
+                kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))(f"{soft} is missing")
+        else:
+            kwargs.get("print_warning_callback", lambda x: print(f"[!] {x}"))("Current session is FUCKING DEAD")
 
     def __detect_os(self, session):
         cmd = 'cat /etc/*release | grep PRETTY_NAME | sed "s/PRETTY_NAME=//"\n\nsysteminfo\n'
