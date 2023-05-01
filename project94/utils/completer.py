@@ -7,8 +7,7 @@ def _make_options(commands) -> list[str]:
         if commands[cmd_name].subcommands:
             for subcmd in commands[cmd_name].subcommands:
                 r.append(f"{cmd_name} {subcmd.name} ")
-        else:
-            r.append(f"{cmd_name} ")
+        r.append(f"{cmd_name} ")
     return r
 
 
@@ -18,9 +17,6 @@ class CommandsCompleter:
         self.matches = []
 
     def complete(self, text, state):
-        if text in self.options:
-            return None
-
         if state == 0:
             if text:
                 self.matches = [line for line in self.options if line and line.startswith(text)]
