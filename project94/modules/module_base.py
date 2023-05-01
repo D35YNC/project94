@@ -10,11 +10,15 @@ def command(*, name: str = None, description: str = None, long_description: str 
 
 class Command:
     def __init__(self, parent=None, func: callable = None, name: str = "", description: str = "", long_description: str = ""):
-        self.__parent = parent
+        if parent and isinstance(parent, Command):
+            self.__parent = parent
+        else:
+            # TODO: exception
+            self.__parent = None
         self.__func = func if func else lambda *args, **kwargs: print(f"Usage: {self.usage}")
         self.__name = name.lower() if name else func.__name__.lower()
-        self.__description = description if description else func.__doc__
-        self.__long_description = long_description if long_description else description
+        self.__description = description
+        self.__long_description = long_description
         self.__usage = ""
         self.__subcommands = []
         self.__args = {}
@@ -36,9 +40,14 @@ class Command:
             self.__args[func_info.varargs.upper()] = None
             self.__unlimited_args = True
 
+        if self.__parent:
+            parent.subcommands.append(self)
+
         self._update_usage_string()
 
     def __call__(self, *args, **kwargs):
+        # TODO:
+        #  Unlimited nesting of commands
         if self.has_subcommands and 1 < len(args):
             for subcmd in self.__subcommands:
                 if args[0] == self.name and args[1] == subcmd.name:
@@ -93,10 +102,9 @@ class Command:
     def subcommands(self):
         return self.__subcommands
 
-    def subcommand(self, name=None, description=None):
+    def subcommand(self, *, name: str = None, description: str = None, long_description: str = None):
         def wrapper(func):
-            c = Command(self, func, name, description)
-            self.__subcommands.append(c)
+            c = Command(self, func, name, description, long_description)
             self._update_usage_string()
             return c
         return wrapper
@@ -120,11 +128,11 @@ class Command:
             self.__usage += f" {{{' '.join(subcmd.name for subcmd in self.__subcommands)}}}"
 
         if self.__args:
-            if not_required := [arg for arg in self.__args if self.__args[arg] is not None]:
-                self.__usage += f" [{' '.join(not_required)}]"
             if required := [arg for arg in self.__args if self.__args[arg] is None]:
                 self.__usage += f" {' '.join(required)}"
                 self.__args_required_count = len(required)
+            if not_required := [arg for arg in self.__args if self.__args[arg] is not None]:
+                self.__usage += f" [{' '.join(not_required)}]"
 
 
 class Module(abc.ABC):
