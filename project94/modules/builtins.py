@@ -1,7 +1,9 @@
 import os.path
+import socket
+
+import charset_normalizer
 
 from .module_base import *
-import socket
 from ..listener import Listener
 from ..utils import Printer
 
@@ -53,9 +55,23 @@ class Builtins(Module):
     @command(name="encoding", description="changes active session encoding")
     def encoding(self, new_encoding: str, **kwargs):
         app = kwargs.get("app")
-        if app.active_session:
-            app.active_session.encoding = new_encoding
-            Printer.info(f"Installed encoding: {app.active_session.encoding}")
+        if session := app.active_session:
+            session.encoding = new_encoding
+            Printer.info(f"Installed encoding: {session.encoding}")
+        else:
+            Printer.warning("Current session is FUCKING DEAD")
+
+    @encoding.subcommand(name="autodetect", description="Trying to autodetect encoding")
+    def autodetect_encoding(self, *cmd, **kwargs):
+        app = kwargs.get("app")
+        if session := app.active_session:
+            if len(cmd) == 0:
+                cmd = "whoami"
+            else:
+                cmd = ' '.join(cmd)
+            data = session.send_command_and_recv(cmd, True)
+            detect = charset_normalizer.detect(data)
+            Printer.info(f"Encoding detected {detect['encoding']}. Try it")
         else:
             Printer.warning("Current session is FUCKING DEAD")
 
