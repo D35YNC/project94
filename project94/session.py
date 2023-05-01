@@ -11,13 +11,16 @@ class Session:
     def __init__(self, sock: socket.socket, listener):
         self.__socket = sock
         self.__listener = listener
-        self.__commands_queue = queue.Queue()
+
         self.__rhost, self.__rport = sock.getpeername()
         self.__encoding = "utf-8"
         self.__session_hash = networking.create_session_hash(self.rhost, self.rport)
+        self.__commands_queue = queue.Queue()
+
         self.__on_read = lambda _: None
         self.__on_write = lambda _: None
         self.__on_error = lambda _: None
+
         self.interactive = False
         self.extended_info = {}
 
@@ -98,3 +101,6 @@ class Session:
 
     def kill(self):
         self.__on_error(self)
+
+    def __str__(self):
+        return f"{self.hash[:8]} <{self.rhost}:{self.rport}>"

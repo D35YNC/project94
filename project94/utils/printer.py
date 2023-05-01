@@ -1,6 +1,3 @@
-import sys
-
-
 class Printer:
     colored = True
 

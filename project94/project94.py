@@ -5,7 +5,9 @@ import readline
 import select
 import signal
 import socket
+import ssl
 import threading
+import time
 
 from .listener import Listener
 from .modules.module_base import Module, Command
@@ -27,25 +29,32 @@ class Project94:
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
 
-        Printer.colored = not args.disable_colors
-        self.sessions_drop_duplicates = args.drop_duplicates
-        self.sessions_show_banner = args.show_banner
-        self.config_path = args.config
-
-        self.modules: list[Module] = []
-        self.commands: dict[str, Command] = {}
-        self.listeners: list[Listener] = []
-        self.sessions: dict[str, Session] = {}
         self.__active_session: Session = None
+
+        self.commands: dict[str, Command] = {}
+        self.__modules: list[Module] = []
+
         self.__read_sockets: list[socket.socket] = []
         self.__write_sockets: list[socket.socket] = []
 
+        self.listeners: list[Listener] = []
+        self.sessions: dict[str, Session] = {}
+
         self.__load_modules()
 
-        if os.path.isfile(self.config_path):
-            self.config = json.load(open(self.config_path, mode='r', encoding="utf-8"))
+        Printer.colored = not args.disable_colors
+
+        if args.disable_config:
+            self.__config_path = None
+            self.config = {}
+            if args.listeners:
+                self.config["listeners"] = json.loads(args.listeners)
         else:
-            self.config = {"listeners": []}
+            self.__config_path = args.config
+            if os.path.isfile(self.__config_path):
+                self.config = json.load(open(self.__config_path, mode='r', encoding="utf-8"))
+            else:
+                self.config = {"listeners": []}
 
         for settings in self.config["listeners"]:
             Printer.info(f"Loading listener \"{settings.get('name')}\"")
@@ -53,22 +62,18 @@ class Project94:
             self.listeners.append(listener)
 
     def main(self):
-        for mod in self.modules:
-            mod.on_master_ready()
+        for mod in self.__modules:
+            mod.on_ready()
 
-        print("Startup options:")
-        if self.sessions_drop_duplicates:
-            Printer.warning("- Duplicates dropping enabled")
-        else:
-            Printer.info("- Duplicates dropping disabled")
-
-        if self.sessions_show_banner:
-            Printer.info("- Banners suppressing disabled")
-        else:
-            Printer.warning("- Banners suppressing enabled")
+        for listener in self.listeners:
+            if listener.autorun:
+                if sock := listener.start():
+                    self.add_listener_sock(sock)
+                    Printer.info(f"{listener} started")
 
         th = threading.Thread(target=self.interface, daemon=True)
         th.start()
+
         while True:
             # TODO
             #  1. [ ] DO WHATEVER YOU WANT, BUT REMOVE hisith FUCKING TIMEOUT
@@ -86,17 +91,10 @@ class Project94:
                         self.__read_sockets.remove(listener.listen_socket)
                         continue
                     session_socket, session_addr = listener.listen_socket.accept()
-                    session = listener.handle_connection(session_socket, session_addr,
-                                                         drop_duplicates=self.sessions_drop_duplicates,
-                                                         show_banner=self.sessions_show_banner)
-                    self.__restore_prompt()
+                    session = listener.handle_connection(session_socket, session_addr)
                     if session:
-                        self.__read_sockets.append(session.socket)
-                        session.set_callbacks(self.session_read_callback, self.session_write_callback, self.session_error_callback)
-                        self.sessions[session.hash] = session
-
-                        for mod in self.modules:
-                            mod.on_session_ready(session)
+                        self.register_session(session)
+                    self.__restore_prompt()
                 elif session := self.get_session(fd=socket_fd):
                     data = recvall(socket_fd)
                     if not data:
@@ -104,7 +102,7 @@ class Project94:
                         # Else session DO SUICIDE
                         Printer.warning(f"Session {session.rhost}:{session.rport} dead")
                         self.__restore_prompt()
-                        self.close_connection(session, False)
+                        self.close_session(session, False)
                         continue
                     try:
                         data = data.decode(session.encoding)
@@ -129,7 +127,7 @@ class Project94:
                         except (socket.error, OSError) as ex:
                             Printer.error(f"Cant send data to session {session.rhost}:{session.rport}. {ex}")
                             self.__restore_prompt()
-                            self.close_connection(session)
+                            self.close_session(session)
                     else:
                         if socket_fd in self.__write_sockets:
                             self.__write_sockets.remove(socket_fd)
@@ -141,17 +139,18 @@ class Project94:
                     listener.stop()
                     Printer.error(f"Listener {listener.lhost}:{listener.lport} error")
                 elif session := self.get_session(fd=socket_fd):
-                    self.close_connection(session)
+                    self.close_session(session)
 
         th.join()
 
-        self.config["listeners"] = []
-        for listener in self.listeners:
-            self.config["listeners"].append(listener.save())
-            if listener.is_running:
-                listener.stop()
-            Printer.warning(f"Listener {listener} stopped")
-        json.dump(self.config, open(self.config_path, mode='w', encoding="utf-8"))
+        if self.__config_path:
+            self.config["listeners"] = []
+            for listener in self.listeners:
+                self.config["listeners"].append(listener.save())
+                if listener.is_running:
+                    listener.stop()
+                    Printer.warning(f"Listener {listener} stopped")
+            json.dump(self.config, open(self.__config_path, mode='w', encoding="utf-8"))
 
     def interface(self):
         # TODO
@@ -188,14 +187,47 @@ class Project94:
             else:
                 Printer.error("Unknown command")
 
-    def close_connection(self, session: Session, show_msg: bool = True):
+    def register_session(self, session: Session):
+        session_addr = session.socket.getpeername()
+
+        if listener := session.listener:
+            if listener.drop_duplicates:
+                for s in listener.sockets:
+                    if s.getpeername()[0] == session_addr[0]:
+                        Printer.warning("Detected the same host connection, dropping...")
+                        session.socket.shutdown(socket.SHUT_RDWR)
+                        session.socket.close()
+                        return
+
+            if listener.suppress_banners:
+                try:
+                    session.socket.send("pwd\n".encode())
+                except (OSError, socket.error, ssl.SSLError) as ex:
+                    Printer.error(f"{session_addr[0]}:{session_addr[1]} dies from cringe")
+                    Printer.error(str(ex))
+                    return
+                else:
+                    time.sleep(1)
+                    _ = recvall(session.socket)
+
+        listener.sockets.append(session.socket)
+        self.__read_sockets.append(session.socket)
+        session.set_callbacks(self.session_read_callback, self.session_write_callback, self.session_error_callback)
+        self.sessions[session.hash] = session
+
+        for mod in self.__modules:
+            mod.on_session_ready(session)
+
+        Printer.info(f"New session: {session_addr[0]}:{session_addr[1]}")
+
+    def close_session(self, session: Session, show_msg: bool = True):
         """
         Gracefully close connection
         :param session: `Session` to close
         :param show_msg: Show a message that the session is closed
         """
         # Notifying modules about dead session
-        for mod in self.modules:
+        for mod in self.__modules:
             mod.on_session_dead(session)
         if self.active_session is session:
             self.active_session = None
@@ -218,6 +250,10 @@ class Project94:
     def add_listener_sock(self, sock: socket.socket):
         if sock and sock not in self.__read_sockets:
             self.__read_sockets.append(sock)
+
+    def del_listener_sock(self, sock: socket.socket):
+        if sock in self.__read_sockets:
+            self.__read_sockets.remove(sock)
 
     def get_listener(self, *, fd: socket.socket = None, name: str = None) -> Listener | None:
         """
@@ -299,16 +335,16 @@ class Project94:
             self.__write_sockets.append(session.socket)
 
     def session_error_callback(self, session: Session):
-        self.close_connection(session)
+        self.close_session(session)
 
     def shutdown(self, *args):
         """Gracefully exit"""
         Printer.warning("Exit...")
         self.EXIT.set()
-        for mod in self.modules:
-            mod.on_master_dead()
+        for mod in self.__modules:
+            mod.on_shutdown()
         while 0 < len(self.sessions):
-            self.close_connection(self.sessions[list(self.sessions.keys())[0]])
+            self.close_session(self.sessions[list(self.sessions.keys())[0]])
 
     def __load_modules(self):
         for f in os.listdir(os.path.join(os.path.dirname(__file__), "modules")):
@@ -327,12 +363,12 @@ class Project94:
                 Printer.error(f"Error while loading mudule {cls.__name__}: {ex}")
                 continue
             else:
-                if mod in self.modules:
-                    Printer.error(f"Module {mod.name} from {mod.__module__} already imported from {self.modules.index(mod).__module__}")
+                if mod in self.__modules:
+                    Printer.error(f"Module {mod.name} from {mod.__module__} already imported from {self.__modules.index(mod).__module__}")
                 else:
-                    self.modules.append(mod)
+                    self.__modules.append(mod)
 
-        for mod in self.modules:
+        for mod in self.__modules:
             mod_load_succ = True
             mod_commands = mod.get_commands()
             for cmd in mod_commands:
@@ -361,6 +397,10 @@ def entry():
                         type=str,
                         help="load specified config",
                         default="94.conf")
+    parser.add_argument("-l", "--listeners",
+                        type=str,
+                        help="load listeners from string",
+                        default=None)
     parser.add_argument("--disable-config",
                         action="store_true",
                         help="disable config save-load",
@@ -369,16 +409,11 @@ def entry():
                         action="store_true",
                         help="disable colored output",
                         default=False)
-    parser.add_argument("--show-banner-pls",
-                        dest="show_banner",
-                        action="store_true",
-                        help="dont suppress banners for new sessions",
-                        default=False)
-    parser.add_argument("--drop-duplicates",
-                        action="store_true",
-                        help="disable duplicating sessions from same ip",
-                        default=False)
+
     a = parser.parse_args()
+
+    if a.listeners:
+        a.disable_config = True
 
     print(f"\n{get_banner()}")
 

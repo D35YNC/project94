@@ -1,10 +1,12 @@
 import os.path
 import socket
+import time
 
 import charset_normalizer
 
 from .module_base import *
 from ..listener import Listener
+from ..session import Session
 from ..utils import Printer
 
 
@@ -27,7 +29,7 @@ class Builtins(Module):
         except socket.error:
             Printer.error(f"Cant connect to {ip}:{port}")
         else:
-            app.handle_connection(sock, sock.getpeername())
+            app.register_session(Session(sock, None))
 
     @cmd.subcommand(name="current", description="execute CMDLINE in current session")
     def cmd_current(self, *cmdline, **kwargs):
@@ -134,7 +136,7 @@ class Builtins(Module):
                     for subcmd in cmd.subcommands:
                         print(subcmd.usage)
             else:
-                Printer.warning(f"Command {command_name} not found")
+                Printer.warning(f"Command \"{command_name}\" not found")
         else:
             for cmd in app.commands:
                 print(f"{cmd:<20}{app.commands[cmd].description}")
@@ -159,7 +161,7 @@ class Builtins(Module):
             if session_obj := app.get_session(id_=session_id, idx=session_id):
                 session_obj.kill()
             else:
-                Printer.warning(f"Session {session_id} not found")
+                Printer.warning(f"Session \"{session_id}\" not found")
         elif session := app.active_session:
             session.kill()
         else:
@@ -222,11 +224,12 @@ class Builtins(Module):
         while ans not in ['y', 'n', 'yes', 'no']:
             ans = input("Enable SSL [y/n] ").lower()
         #
+        listener = Listener(app, name, ip, port)
         if ans.lower().startswith('y'):
-            listener = Listener(app, name, ip, port, True)
+            listener.setup(False, True)
             Printer.info(f"U need initialize certificates. Use \"listener edit_ssl {name} all\" to do it.")
         else:
-            listener = Listener(app, name, ip, port, False)
+            listener.setup(False, False)
 
         Printer.info(f"Listener: {listener} created")
         app.listeners.append(listener)
@@ -235,12 +238,9 @@ class Builtins(Module):
     def listener_start(self, name: str, **kwargs):
         app = kwargs.get("app")
         if listener := app.get_listener(name=name):
-            Printer.info(f"Starting listener {listener}")
-            s = listener.start()
-            if s:
-                app.add_listener_sock(s)
-            # else:
-            #     Printer.error("FUCK")
+            if sock := listener.start():
+                app.add_listener_sock(sock)
+                Printer.success(f"Listener {listener} Start: OK")
         else:
             Printer.warning(f"Listener \"{name}\" not found")
 
@@ -248,8 +248,10 @@ class Builtins(Module):
     def listener_stop(self, name: str, **kwargs):
         app = kwargs.get("app")
         if listener := app.get_listener(name=name):
+            app.del_listener_sock(listener.listen_socket)
+            time.sleep(0.5)
             listener.stop()
-            Printer.info(f"Listener {listener} stopped")
+            Printer.success(f"Listener {listener} Stop: OK")
         else:
             Printer.warning(f"Listener \"{name}\" not found")
 
@@ -258,7 +260,11 @@ class Builtins(Module):
         app = kwargs.get("app")
         if listener := app.get_listener(name=name):
             Printer.info(f"Restarting listener {listener}")
-            listener.restart()
+            app.del_listener_sock(listener.listen_socket)
+            time.sleep(0.5)
+            if sock := listener.restart():
+                app.add_listener_sock(sock)
+                Printer.success(f"Listener {listener} Restart: OK")
         else:
             Printer.warning(f"Listener \"{name}\" not found")
 
@@ -266,9 +272,12 @@ class Builtins(Module):
     def listener_delete(self, name: str, **kwargs):
         app = kwargs.get("app")
         if listener := app.get_listener(name=name):
+            Printer.info(f"Deleting listener {listener}")
+            app.del_listener_sock(listener.listen_socket)
+            time.sleep(0.5)
             listener.stop()
             app.listeners.remove(listener)
-            Printer.info(f"Listener {listener} deleted")
+            Printer.success(f"Listener {listener} Delete: OK")
         else:
             Printer.warning(f"Listener \"{name}\" not found")
 
@@ -307,17 +316,17 @@ class Builtins(Module):
 
                 if ca:
                     if listener.load_ca(ca):
-                        Printer.info("CA loaded")
+                        Printer.info(f"CA {ca} loaded")
                 if cert:
                     if listener.load_cert(cert, key or None):
-                        Printer.info("CERT/KEY loaded")
+                        Printer.info(f"CERT {cert}{f' and KEY {key} ' if cert is not None else ' '}loaded")
             case "ca":
                 ca = get_filename_input("CA")
                 if ca is None:
                     return
                 if ca:
-                    listener.load_ca(ca)
-                    Printer.info("Ca is set?")
+                    if listener.load_ca(ca):
+                        Printer.info("CA loaded")
             case "cert" | "key":
                 cert = get_filename_input("CERT")
                 if cert is None:
@@ -372,7 +381,7 @@ class Builtins(Module):
                 print(f"From: {app.sessions[id_].rhost}:{app.sessions[id_].rport}")
 
     @session.subcommand(name="status", description="shows information about active session")
-    def sessions_status(self, session_id: str = None, **kwargs):
+    def sessions_status(self, session_id: str = "", **kwargs):
         def print_session(session_obj):
             print(f"Hash: {session_obj.hash}")
             print(f"From: {session_obj.rhost}:{session_obj.rport}")
@@ -384,15 +393,15 @@ class Builtins(Module):
             #     print(f"Cert: {session.socket.getpeercert()}")
             # else:
             #     print(f"SSL: Disabled")
-            for ext in app.active_session.extended_info:
-                print(f"{ext}: {app.active_session.extended_info[ext]}")
+            for ext in session_obj.extended_info:
+                print(f"{ext}: {session_obj.extended_info[ext]}")
 
         app = kwargs.get("app")
         if session_id:
             if session := app.get_session(id_=session_id, idx=session_id):
                 print_session(session)
             else:
-                Printer.warning(f"Session {session_id} not found")
+                Printer.warning(f"Session \"{session_id}\" not found")
         elif session := app.active_session:
             print_session(session)
         else:
