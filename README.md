@@ -8,6 +8,7 @@
 
 ### Features
 - [X] Multiplying sessions
+- [X] Multiplying listeners
 - [X] SSL support + client certificate verify
 - [X] Supports both reverse and bind shells
 - [X] Auto-completion of interactive interface commands

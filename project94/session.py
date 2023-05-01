@@ -1,15 +1,18 @@
-import queue
 import codecs
+import queue
+import socket
+import ssl
 import time
 
 from .utils import networking
 
 
 class Session:
-    def __init__(self, socket_fd):
-        self.__socket = socket_fd
+    def __init__(self, sock: socket.socket, listener):
+        self.__socket = sock
+        self.__listener = listener
         self.__commands_queue = queue.Queue()
-        self.__rhost, self.__rport = socket_fd.getpeername()
+        self.__rhost, self.__rport = sock.getpeername()
         self.__encoding = "utf-8"
         self.__session_hash = networking.create_session_hash(self.rhost, self.rport)
         self.__on_read = lambda _: None
@@ -28,8 +31,12 @@ class Session:
             self.__on_error = error_callback
 
     @property
-    def socket(self):
+    def socket(self) -> socket.socket:
         return self.__socket
+
+    @property
+    def listener(self):
+        return self.__listener
 
     @property
     def rhost(self):
@@ -40,7 +47,11 @@ class Session:
         return self.__rport
 
     @property
-    def session_hash(self):
+    def ssl_enabled(self):
+        return isinstance(self.__socket, ssl.SSLSocket)
+
+    @property
+    def hash(self):
         return self.__session_hash
 
     @property
@@ -67,19 +78,21 @@ class Session:
         self.__commands_queue.put_nowait(f"{command}\n")
         self.__on_write(self)
 
-    def send_command_and_recv(self, command: str):
+    def send_command_and_recv(self, command: str, return_raw: bool = False) -> str | bytes | None:
         try:
             self.__on_read(self)
             time.sleep(1)
+            if not command.endswith('\n'):
+                command += '\n'
             self.socket.send(command.encode(self.__encoding))
-            time.sleep(1)
-            d = networking.recvall(self.socket)
+            data = networking.recvall(self.socket)
             try:
-                d = d.decode(self.__encoding)
+                if not return_raw:
+                    data = data.decode(self.__encoding)
             except (UnicodeError, UnicodeDecodeError):
                 return None
             else:
-                return d
+                return data
         finally:
             self.__on_read(self)
 
