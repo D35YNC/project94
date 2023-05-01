@@ -1,13 +1,13 @@
 import importlib
+import json
 import os
 import readline
 import select
 import signal
 import socket
-import ssl
 import threading
-import time
 
+from .listener import Listener
 from .modules.module_base import Module, Command
 from .session import Session
 from .utils import CommandsCompleter
@@ -22,7 +22,7 @@ __all__ = ["Project94", "entry", "__version__"]
 
 class Project94:
     def __init__(self, args):
-        self.EXIT_FLAG = False
+        self.EXIT = threading.Event()
 
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
@@ -30,31 +30,27 @@ class Project94:
         Printer.colored = not args.disable_colors
         self.sessions_drop_duplicates = args.drop_duplicates
         self.sessions_show_banner = args.show_banner
-        self.master_host = args.lhost
-        self.master_port = args.lport
+        self.config_path = args.config
 
-        self.active_session: Session = None
-        self.sessions: dict[str, Session] = {}
         self.modules: list[Module] = []
         self.commands: dict[str, Command] = {}
-
-        self.__load_modules()
-
-        self.__master_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.__master_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.listeners: list[Listener] = []
+        self.sessions: dict[str, Session] = {}
+        self.__active_session: Session = None
         self.__read_sockets: list[socket.socket] = []
         self.__write_sockets: list[socket.socket] = []
 
-        if args.keyfile and args.certfile:
-            # TODO CHECK REVSHELL w\o ca (cert+key)
-            self.__ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH, cafile=args.keyfile.name)
-            self.__ssl_context.verify_mode = ssl.VerifyMode.CERT_REQUIRED
-            self.__ssl_context.load_cert_chain(args.certfile.name)
-            self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
-            Printer.success("SSL ENABLED")
+        self.__load_modules()
+
+        if os.path.isfile(self.config_path):
+            self.config = json.load(open(self.config_path, mode='r', encoding="utf-8"))
         else:
-            self.__ssl_context = None
-            Printer.warning("SSL DISABLED")
+            self.config = {"listeners": []}
+
+        for settings in self.config["listeners"]:
+            Printer.info(f"Loading listener \"{settings.get('name')}\"")
+            listener = Listener.load(self, settings)
+            self.listeners.append(listener)
 
     def main(self):
         for mod in self.modules:
@@ -71,39 +67,44 @@ class Project94:
         else:
             Printer.warning("- Banners suppressing enabled")
 
-        self.__master_socket.bind((self.master_host, self.master_port))
-        self.__master_socket.listen(0x10)
-        self.__read_sockets.append(self.__master_socket)
-
-        Printer.info(f"Listening: {self.master_host}:{self.master_port}")
-
         th = threading.Thread(target=self.interface, daemon=True)
         th.start()
-
         while True:
-            # I FUCKING HATE THIS TIMEOUT
             # TODO
             #  1. [ ] DO WHATEVER YOU WANT, BUT REMOVE hisith FUCKING TIMEOUT
             #  2. [X] ValueError when killin session and socket_fd == -1
+            # I FUCKING HATE THIS TIMEOUT
             read_sockets, write_sockets, error_sockets = select.select(self.__read_sockets, self.__write_sockets, self.__read_sockets, 0.5) # 0.25
 
-            if self.EXIT_FLAG:
+            if self.EXIT.is_set():
                 break
 
             for socket_fd in read_sockets:
-                if socket_fd is self.__master_socket:
-                    session_socket, session_addr = self.__master_socket.accept()
-                    self.handle_connection(session_socket, session_addr)
-                else:
-                    session = self.get_session(fd=socket_fd)
+                if listener := self.get_listener(fd=socket_fd):
+                    # TODO: REWRITE
+                    if not listener.is_running and listener.listen_socket in self.__read_sockets:
+                        self.__read_sockets.remove(listener.listen_socket)
+                        continue
+                    session_socket, session_addr = listener.listen_socket.accept()
+                    session = listener.handle_connection(session_socket, session_addr,
+                                                         drop_duplicates=self.sessions_drop_duplicates,
+                                                         show_banner=self.sessions_show_banner)
+                    self.__restore_prompt()
+                    if session:
+                        self.__read_sockets.append(session.socket)
+                        session.set_callbacks(self.session_read_callback, self.session_write_callback, self.session_error_callback)
+                        self.sessions[session.hash] = session
+
+                        for mod in self.modules:
+                            mod.on_session_ready(session)
+                elif session := self.get_session(fd=socket_fd):
                     data = recvall(socket_fd)
                     if not data:
                         # When session is None then sessino killed manually
                         # Else session DO SUICIDE
-                        if session:
-                            Printer.warning(f"Session {session.rhost}:{session.rport} dead")
-                            self.__restore_prompt()
-                            self.close_connection(session, False)
+                        Printer.warning(f"Session {session.rhost}:{session.rport} dead")
+                        self.__restore_prompt()
+                        self.close_connection(session, False)
                         continue
                     try:
                         data = data.decode(session.encoding)
@@ -118,36 +119,39 @@ class Project94:
                             self.__restore_prompt()
                         else:
                             print(data, end='')
-
+                # else:
+                #     Printer.error(f"Read unknown socket {socket_fd}")
             for socket_fd in write_sockets:
-                session = self.get_session(fd=socket_fd)
-                if not session:
-                    if socket_fd in self.__write_sockets:
-                        self.__write_sockets.remove(socket_fd)
-                    continue
-                if next_cmd := session.next_command():
-                    try:
-                        socket_fd.send(next_cmd.encode(session.encoding))
-                    except (socket.error, OSError):
-                        Printer.error(f"Cant send data to session {session.rhost}:{session.rport}")
-                        self.__restore_prompt()
-                        self.close_connection(session)
-                else:
-                    self.__write_sockets.remove(socket_fd)
-
+                if session := self.get_session(fd=socket_fd):
+                    if next_cmd := session.next_command():
+                        try:
+                            socket_fd.send(next_cmd.encode(session.encoding))
+                        except (socket.error, OSError) as ex:
+                            Printer.error(f"Cant send data to session {session.rhost}:{session.rport}. {ex}")
+                            self.__restore_prompt()
+                            self.close_connection(session)
+                    else:
+                        if socket_fd in self.__write_sockets:
+                            self.__write_sockets.remove(socket_fd)
+                # else:
+                #     Printer.error(f"Write unknown socket {socket_fd}")
             for socket_fd in error_sockets:
                 # MMMMM?
-                if socket_fd is self.__master_socket:
-                    Printer.error("MASTER ERROR")
-                    self.shutdown()
-                    break
-                if session := self.get_session(fd=socket_fd):
+                if listener := self.get_listener(fd=socket_fd):
+                    listener.stop()
+                    Printer.error(f"Listener {listener.lhost}:{listener.lport} error")
+                elif session := self.get_session(fd=socket_fd):
                     self.close_connection(session)
 
-        Printer.warning("Master exiting...")
-        self.__master_socket.shutdown(socket.SHUT_RDWR)
-        self.__master_socket.close()
         th.join()
+
+        self.config["listeners"] = []
+        for listener in self.listeners:
+            self.config["listeners"].append(listener.save())
+            if listener.is_running:
+                listener.stop()
+            Printer.warning(f"Listener {listener} stopped")
+        json.dump(self.config, open(self.config_path, mode='w', encoding="utf-8"))
 
     def interface(self):
         # TODO
@@ -162,10 +166,7 @@ class Project94:
         readline.set_completer(completer.complete)
         readline.parse_and_bind('tab: complete')
         readline.set_completion_display_matches_hook(completer.display_matches)
-        while True:
-            if self.EXIT_FLAG:
-                break
-
+        while not self.EXIT.is_set():
             try:
                 command = input(self.context)
             except EOFError:
@@ -183,50 +184,9 @@ class Project94:
                 else:
                     self.active_session.send_command(" ".join(command))
             elif command[0] in self.commands:
-                self.commands[command[0]](*command,
-                                          app=self,
-                                          print_success_callback=lambda x: Printer.success(x),
-                                          print_info_callback=lambda x: Printer.info(x),
-                                          print_warning_callback=lambda x: Printer.warning(x),
-                                          print_error_callback=lambda x: Printer.error(x))
+                self.commands[command[0]](*command, app=self)
             else:
                 Printer.error("Unknown command")
-
-    def handle_connection(self, session_socket: socket.socket, session_addr: tuple[str, int]):
-        if self.__ssl_context:
-            try:
-                session_socket = self.__ssl_context.wrap_socket(session_socket, True)
-            except ssl.SSLCertVerificationError:
-                Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. Bad certificate")
-                return
-            except ssl.SSLError as ex:
-                Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}")
-                return
-
-        if self.sessions_drop_duplicates:
-            for id_ in self.sessions:
-                if self.sessions[id_].rhost == session_addr[0]:
-                    Printer.warning("Detect the same host connection, dropping...")
-                    self.__restore_prompt()
-                    session_socket.shutdown(socket.SHUT_RDWR)
-                    session_socket.close()
-                    return
-
-        if not self.sessions_show_banner:
-            session_socket.send("pwd\n".encode())
-            time.sleep(1)
-            recvall(session_socket)
-
-        Printer.info(f"New session: {session_addr[0]}:{session_addr[1]}")
-        self.__restore_prompt()
-
-        self.__read_sockets.append(session_socket)
-        session = Session(session_socket)
-        session.set_callbacks(self.session_read_callback, self.session_write_callback, self.session_error_callback)
-        self.sessions[session.session_hash] = session
-
-        for mod in self.modules:
-            mod.on_session_ready(session)
 
     def close_connection(self, session: Session, show_msg: bool = True):
         """
@@ -234,12 +194,15 @@ class Project94:
         :param session: `Session` to close
         :param show_msg: Show a message that the session is closed
         """
+        # Notifying modules about dead session
         for mod in self.modules:
             mod.on_session_dead(session)
-        if show_msg:
-            Printer.warning(f"Session {session.rhost}:{session.rport} killed")
-        if self.active_session == session:
+        if self.active_session is session:
             self.active_session = None
+        if (listener := session.listener) and session.socket in listener.sockets:
+            listener.sockets.remove(session.socket)
+        if session.hash in self.sessions:
+            self.sessions.pop(session.hash)
         if session.socket in self.__read_sockets:
             self.__read_sockets.remove(session.socket)
         if session.socket in self.__write_sockets:
@@ -249,21 +212,42 @@ class Project94:
             session.socket.close()
         except (socket.error, OSError):
             pass
-        if session.session_hash in self.sessions:
-            self.sessions.pop(session.session_hash)
+        if show_msg:
+            Printer.warning(f"Session {session.rhost}:{session.rport} killed")
 
-    def get_session(self, *, fd: socket.socket = None, id_: str = None, idx: int = None) -> [Session, None]:
+    def add_listener_sock(self, sock: socket.socket):
+        if sock and sock not in self.__read_sockets:
+            self.__read_sockets.append(sock)
+
+    def get_listener(self, *, fd: socket.socket = None, name: str = None) -> Listener | None:
+        """
+        Looking for listener in `self.listeners` by criteria:
+        :param fd: search by `listener.listen_socket`
+        :param name: search by `listener.name`
+        :return: `Listener` or `None`
+        """
+        if fd:
+            for listener in self.listeners:
+                if listener.listen_socket is fd:
+                    return listener
+        if name:
+            for listener in self.listeners:
+                if listener.name == name:
+                    return listener
+        return None
+
+    def get_session(self, *, fd: socket.socket = None, id_: str = None, idx: int = None) -> Session | None:
         """
         Looking for session in `self.sessions` by criteria:
         :param fd: search by `session.socket`
-        :param id_: search by id `session.session_hash`
+        :param id_: search by id `session.hash`
         :param idx: search by index in `self.sessions`
         :return: `Session` or `None`
         """
         if fd:
-            for id_ in self.sessions:
-                if self.sessions[id_].socket == fd:
-                    return self.sessions[id_]
+            for h in self.sessions:
+                if self.sessions[h].socket is fd:
+                    return self.sessions[h]
         if id_:
             for h in self.sessions:
                 if h.startswith(id_):
@@ -279,9 +263,20 @@ class Project94:
         return None
 
     @property
+    def active_session(self) -> Session:
+        return self.__active_session
+
+    @active_session.setter
+    def active_session(self, value: Session):
+        if isinstance(value, Session):
+            self.__active_session = value
+        else:
+            self.__active_session = None
+
+    @property
     def context(self):
         """
-        :return:Current session context [rhost:rport]
+        :return: Current session context `[rhost:rport]`
         """
         if self.active_session:
             if self.active_session.interactive:
@@ -309,7 +304,7 @@ class Project94:
     def shutdown(self, *args):
         """Gracefully exit"""
         Printer.warning("Exit...")
-        self.EXIT_FLAG = True
+        self.EXIT.set()
         for mod in self.modules:
             mod.on_master_dead()
         while 0 < len(self.sessions):
@@ -362,22 +357,14 @@ def entry():
     parser.add_argument("-V", "--version",
                         action='version',
                         version=f"%(prog)s ver{__version__}")
-    parser.add_argument("-i", "--lhost",
+    parser.add_argument("-c", "--config",
                         type=str,
-                        metavar="HOST",
-                        help="Host to listen",
-                        default="0.0.0.0")
-    parser.add_argument("-p", "--lport",
-                        type=int,
-                        metavar="PORT",
-                        help="Port to listen",
-                        default=443)
-    parser.add_argument("-k", "--keyfile",
-                        type=argparse.FileType(mode='r'),
-                        help="keyfile for ssl")
-    parser.add_argument("-c", "--certfile",
-                        type=argparse.FileType(mode='r'),
-                        help="certfile for ssl")
+                        help="load specified config",
+                        default="94.conf")
+    parser.add_argument("--disable-config",
+                        action="store_true",
+                        help="disable config save-load",
+                        default=False)
     parser.add_argument("--disable-colors",
                         action="store_true",
                         help="disable colored output",
