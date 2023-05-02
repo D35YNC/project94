@@ -5,7 +5,7 @@ import time
 import charset_normalizer
 
 from .module_base import *
-from ..listener import Listener
+from ..listener import Listener, ListenerInitError, ListenerStartError, ListenerStopError
 from ..session import Session
 from ..utils import Printer
 
@@ -224,21 +224,28 @@ class Builtins(Module):
         while ans not in ['y', 'n', 'yes', 'no']:
             ans = input("Enable SSL [y/n] ").lower()
         #
-        listener = Listener(app, name, ip, port)
-        if ans.lower().startswith('y'):
-            listener.setup(False, True)
-            Printer.info(f"U need initialize certificates. Use \"listener edit_ssl {name} all\" to do it.")
+        try:
+            listener = Listener(app, name, ip, port)
+        except ListenerInitError as ex:
+            Printer.error(str(ex))
         else:
-            listener.setup(False, False)
-
-        Printer.info(f"Listener: {listener} created")
-        app.listeners.append(listener)
+            if ans.lower().startswith('y'):
+                listener.setup(False, True)
+                Printer.info(f"U need initialize certificates. Use \"listener edit_ssl {name} all\" to do it.")
+            else:
+                listener.setup(False, False)
+            Printer.info(f"Listener: {listener} created")
+            app.listeners.append(listener)
 
     @listener.subcommand(name="start", description="starting specified listener")
     def listener_start(self, name: str, **kwargs):
         app = kwargs.get("app")
         if listener := app.get_listener(name=name):
-            if sock := listener.start():
+            try:
+                sock = listener.start()
+            except ListenerStartError as ex:
+                Printer.error(str(ex))
+            else:
                 app.add_listener_sock(sock)
                 Printer.success(f"Listener {listener} Start: OK")
         else:
@@ -250,8 +257,12 @@ class Builtins(Module):
         if listener := app.get_listener(name=name):
             app.del_listener_sock(listener.listen_socket)
             time.sleep(0.5)
-            listener.stop()
-            Printer.success(f"Listener {listener} Stop: OK")
+            try:
+                listener.stop()
+            except ListenerStopError as ex:
+                Printer.error(str(ex))
+            else:
+                Printer.success(f"Listener {listener} Stop: OK")
         else:
             Printer.warning(f"Listener \"{name}\" not found")
 
@@ -262,7 +273,14 @@ class Builtins(Module):
             Printer.info(f"Restarting listener {listener}")
             app.del_listener_sock(listener.listen_socket)
             time.sleep(0.5)
-            if sock := listener.restart():
+            try:
+                sock = listener.restart()
+            except ListenerStartError as ex:
+                Printer.error(str(ex))
+                Printer.error(f"{listener} Restart: Fail")
+            except ListenerStopError:
+                Printer.error(f"{listener} Restart: Fail")
+            else:
                 app.add_listener_sock(sock)
                 Printer.success(f"Listener {listener} Restart: OK")
         else:
@@ -275,7 +293,10 @@ class Builtins(Module):
             Printer.info(f"Deleting listener {listener}")
             app.del_listener_sock(listener.listen_socket)
             time.sleep(0.5)
-            listener.stop()
+            try:
+                listener.stop()
+            except ListenerStopError as ex:
+                pass  # Printer.error(str(ex))
             app.listeners.remove(listener)
             Printer.success(f"Listener {listener} Delete: OK")
         else:

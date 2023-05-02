@@ -9,7 +9,7 @@ import ssl
 import threading
 import time
 
-from .listener import Listener
+from .listener import Listener, ListenerInitError, ListenerStartError, ListenerStopError
 from .modules.module_base import Module, Command
 from .session import Session
 from .utils import CommandsCompleter
@@ -55,21 +55,32 @@ class Project94:
                 self.config = json.load(open(self.__config_path, mode='r', encoding="utf-8"))
             else:
                 self.config = {"listeners": []}
-
+        if 0 < len(self.config["listeners"]):
+            Printer.info("Loading listeners...")
         for settings in self.config["listeners"]:
-            Printer.info(f"Loading listener \"{settings.get('name')}\"")
-            listener = Listener.load(self, settings)
-            self.listeners.append(listener)
+            try:
+                listener = Listener.load(self, settings)
+            except ListenerInitError as ex:
+                Printer.error(str(ex))
+            else:
+                self.listeners.append(listener)
+                Printer.success(f"{listener} loaded")
+        print()
 
     def main(self):
         for mod in self.__modules:
             mod.on_ready()
 
+        Printer.info("Autorun listeners...")
         for listener in self.listeners:
             if listener.autorun:
-                if sock := listener.start():
+                try:
+                    sock = listener.start()
+                except ListenerStartError as ex:
+                    Printer.error(str(ex))
+                else:
                     self.add_listener_sock(sock)
-                    Printer.info(f"{listener} started")
+                    Printer.success(f"{listener} started")
 
         th = threading.Thread(target=self.interface, daemon=True)
         th.start()
@@ -90,9 +101,18 @@ class Project94:
                     if not listener.is_running and listener.listen_socket in self.__read_sockets:
                         self.__read_sockets.remove(listener.listen_socket)
                         continue
+
                     session_socket, session_addr = listener.listen_socket.accept()
-                    session = listener.handle_connection(session_socket, session_addr)
-                    if session:
+                    if listener.ssl_enabled:
+                        try:
+                            session_socket = listener.ssl_context.wrap_socket(session_socket, True)
+                        except ssl.SSLCertVerificationError:
+                            Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. Bad certificate")
+                            continue
+                        except ssl.SSLError as ex:
+                            Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}")
+                            continue
+                    if session := Session(session_socket, listener):
                         self.register_session(session)
                     self.__restore_prompt()
                 elif session := self.get_session(fd=socket_fd):
@@ -347,6 +367,7 @@ class Project94:
             self.close_session(self.sessions[list(self.sessions.keys())[0]])
 
     def __load_modules(self):
+        Printer.info("Loading modules...")
         for f in os.listdir(os.path.join(os.path.dirname(__file__), "modules")):
             if f.endswith(".py"):
                 mod = os.path.basename(f)[:-3]
@@ -355,32 +376,32 @@ class Project94:
                         importlib.import_module(f"project94.modules.{mod}")
                     except Exception as ex:
                         Printer.error(f"Error while importing {mod}: {ex}")
-                    # TODO CHECK IS CORRECT WORKIN
+
         for cls in Module.__subclasses__():
             try:
                 mod = cls(self)
             except Exception as ex:
                 Printer.error(f"Error while loading mudule {cls.__name__}: {ex}")
                 continue
-            else:
-                if mod in self.__modules:
-                    Printer.error(f"Module {mod.name} from {mod.__module__} already imported from {self.__modules.index(mod).__module__}")
-                else:
-                    self.__modules.append(mod)
 
-        for mod in self.__modules:
-            mod_load_succ = True
+            if mod in self.__modules:
+                Printer.error(f"Module {mod.name} from {mod.__module__} already imported from {self.__modules.index(mod).__module__}")
+                continue
+
+            self.__modules.append(mod)
             mod_commands = mod.get_commands()
             for cmd in mod_commands:
                 if mod_commands[cmd].is_subcommand:
                     continue
                 if cmd in self.commands:
-                    Printer.error(f"Command {cmd} from \"{mod.name}\" ({mod_commands[cmd].module.__module__}) already imported from \"{self.commands[cmd].module.name}\" ({self.commands[cmd].module.__module__})")
-                    mod_load_succ = False
-                else:
-                    self.commands[cmd] = mod_commands[cmd]
-            if mod_load_succ:
+                    Printer.error(f"Command {cmd} from \"{mod.name}\" ({mod_commands[cmd].module.__module__}) already "
+                                  f"imported from \"{self.commands[cmd].module.name}\" "
+                                  f"({self.commands[cmd].module.__module__})")
+                    continue
+                self.commands[cmd] = mod_commands[cmd]
+            else:
                 Printer.success(f"{mod.name} loaded")
+        print()
 
     def __restore_prompt(self):
         print(self.context, end='', flush=True)

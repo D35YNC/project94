@@ -3,8 +3,6 @@ import enum
 import socket
 import ssl
 
-from .session import Session
-from .utils import Printer
 
 """
 LEEEEEGO
@@ -14,7 +12,7 @@ XDD
 """
 
 
-__all__ = ["Listener", "ListenerInitException", "ListenerStartException"]
+__all__ = ["Listener", "ListenerInitError", "ListenerStartError", "ListenerStopError"]
 
 
 class ListenerStateEnum(enum.Enum):
@@ -45,15 +43,10 @@ class ListenerState(metaclass=abc.ABCMeta):
     def enum_obj(self):
         return self.__enum_obj
 
-    @abc.abstractmethod
-    def handle_connection(self, session_socket: socket.socket, session_addr: tuple[str, int], ssl_context: ssl.SSLContext) -> Session | None:
-        raise NotImplementedError()
-
 
 class Running(ListenerState):
     def start(self):
-        Printer.error(f"{self._listener} already running")
-        return None
+        raise ListenerStartError(f"{self._listener} already running")
 
     def stop(self):
         for s in self._listener.sockets:
@@ -63,31 +56,13 @@ class Running(ListenerState):
         self._listener.listen_socket.close()
         self._listener.change_state(ListenerStateEnum.Ready)
 
-    def handle_connection(self, session_socket: socket.socket, session_addr: tuple[str, int], ssl_context: ssl.SSLContext) -> Session | None:
-        if ssl_context:
-            try:
-                session_socket = ssl_context.wrap_socket(session_socket, True)
-            except ssl.SSLCertVerificationError:
-                Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. Bad certificate")
-                return None
-            except ssl.SSLError as ex:
-                Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}")
-                return None
-
-        return Session(session_socket, self._listener)
-
 
 class Stopped(ListenerState):
     def start(self):
-        Printer.error(f"{self._listener} is not ready to start")
-        return None
+        raise ListenerStartError(f"{self._listener} is not ready to start")
 
     def stop(self):
-        Printer.warning(f"{self._listener} is not running")
-
-    def handle_connection(self, session_socket: socket.socket, session_addr: tuple[str, int], ssl_context: ssl.SSLContext) -> Session | None:
-        Printer.error("Cant handle connection when listener is stopped")
-        return None
+        raise ListenerStopError(f"{self._listener} is not running")
 
 
 class Ready(ListenerState):
@@ -97,44 +72,34 @@ class Ready(ListenerState):
         try:
             sock.bind((self._listener.lhost, self._listener.lport))
         except OSError as ex:
-            Printer.error(str(ex))
-            return None
+            raise ListenerStartError(str(ex))
         else:
             sock.listen(0x10)
             self._listener.change_state(ListenerStateEnum.Running)
             return sock
 
     def stop(self):
-        Printer.warning(f"{self._listener} is not running")
-
-    def handle_connection(self, session_socket: socket.socket, session_addr: tuple[str, int], ssl_context: ssl.SSLContext) -> Session | None:
-        Printer.error("Cant handle connection when listener is stopped")
-        return None
+        raise ListenerStopError(f"{self._listener} is not running")
 
 
 class Unknown(ListenerState):
     def start(self) -> socket.socket | None:
-        Printer.error(f"{self._listener} need setup")
-        return None
+        raise ListenerStartError(f"{self._listener} need setup")
 
     def stop(self):
-        Printer.error(f"{self._listener} need setup")
-
-    def handle_connection(self, session_socket: socket.socket, session_addr: tuple[str, int], ssl_context: ssl.SSLContext) -> Session | None:
-        Printer.error(f"{self._listener} need setup")
-        return None
+        ListenerStopError(f"{self._listener} need setup")
 
 
 class Listener:
     def __init__(self, app, name: str, ip: str, port: int):
         if app is None:
-            raise ListenerInitException("App is None")
+            raise ListenerInitError("App is None")
         if name.strip() == "" or ' ' in name:
-            raise ListenerInitException("Incorrect name")
+            raise ListenerInitError("Incorrect name")
         if not isinstance(port, int):
-            raise ListenerInitException("Port is not int")
+            raise ListenerInitError("Port is not int")
         elif not (0 < port < 0xFFFF):
-            raise ListenerInitException("Port is not in range 0-65535")
+            raise ListenerInitError("Port is not in range 0-65535")
 
         self.app = app
         self.__name = name
@@ -166,14 +131,20 @@ class Listener:
             self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
             self.__state = self.__states[ListenerStateEnum.Stopped]
             if ca:
-                for cafile in ca:
-                    if self.load_ca(cafile):
-                        Printer.info(f"CA {cafile} loaded")
+                if isinstance(ca, list):
+                    for cafile in ca:
+                        if not self.load_ca(cafile):
+                            raise ListenerInitError(f"Cant load ca cert {cafile}")
+                else:
+                    raise ListenerInitError("list of ca certs is not list")
             if cert:
-                for certfile in cert:
-                    if len(certfile) == 2:
-                        if self.load_cert(*certfile):
-                            Printer.info(f"CERT {certfile[0]}{f' and KEY {certfile[1]} ' if certfile[1] is not None else ' '}loaded")
+                if isinstance(cert, list):
+                    for certfile in cert:
+                        if len(certfile) == 2:
+                            if not self.load_cert(*certfile):
+                                raise ListenerInitError(f"Cant load cert {certfile}")
+                else:
+                    raise ListenerInitError("list of certs is not list")
         else:
             self.__state = self.__states[ListenerStateEnum.Ready]
 
@@ -181,12 +152,11 @@ class Listener:
         self.__drop_duplicates = drop_duplicates
         self.__suppress_banners = suppress_banners
 
-    def load_ca(self, cafile):
+    def load_ca(self, cafile) -> bool | None:
         if self.ssl_enabled:
             try:
                 self.__ssl_context.load_verify_locations(cafile=cafile)
-            except (ssl.SSLError, OSError) as ex:
-                Printer.error(f"Cant load {cafile}: {ex}")
+            except (ssl.SSLError, OSError):
                 return False
             else:
                 self.__ca.append(cafile)
@@ -194,16 +164,13 @@ class Listener:
                 if 0 < len(self.__ca) and 0 < len(self.__cert) and self.__state.enum_obj is not ListenerStateEnum.Running:
                     self.__state = self.__states[ListenerStateEnum.Ready]
                 return True
-        else:
-            Printer.warning("SSL not enabled")
-        return False
+        return None
 
-    def load_cert(self, certfile, keyfile=None):
+    def load_cert(self, certfile, keyfile=None) -> bool | None:
         if self.ssl_enabled:
             try:
                 self.__ssl_context.load_cert_chain(certfile, keyfile)
-            except (ssl.SSLError, OSError) as ex:
-                Printer.error(f"Cant load cert or key: {ex}")
+            except (ssl.SSLError, OSError):
                 return False
             else:
                 self.__cert.append((certfile, keyfile))
@@ -211,15 +178,12 @@ class Listener:
                 if 0 < len(self.__ca) and 0 < len(self.__cert) and self.__state.enum_obj is not ListenerStateEnum.Running:
                     self.__state = self.__states[ListenerStateEnum.Ready]
                 return True
-        else:
-            Printer.warning("SSL not enabled")
-        return False
+        return None
 
     def start(self) -> socket.socket | None:
-        if sock := self.__state.start():
-            self.__socket = sock
-            return self.__socket
-        return None
+        sock = self.__state.start()
+        self.__socket = sock
+        return self.__socket
 
     def stop(self):
         self.__state.stop()
@@ -255,6 +219,10 @@ class Listener:
     @property
     def ssl_enabled(self) -> bool:
         return self.__ssl_context is not None
+
+    @property
+    def ssl_context(self):
+        return self.__ssl_context
 
     @property
     def certs_status(self) -> dict:
@@ -314,16 +282,17 @@ class Listener:
         listener.setup(settings.get("autorun"), settings.get("ssl"), settings.get("ca", []), settings.get("cert", []))
         return listener
 
-    def handle_connection(self, session_socket: socket.socket, session_addr: tuple[str, int]) -> Session | None:
-        return self.__state.handle_connection(session_socket, session_addr, self.__ssl_context)
-
     def __str__(self):
         return f"{self.name} <{self.lhost}:{self.lport}>"
 
 
-class ListenerInitException(Exception):
+class ListenerInitError(Exception):
     pass
 
 
-class ListenerStartException(Exception):
+class ListenerStartError(Exception):
+    pass
+
+
+class ListenerStopError(Exception):
     pass
