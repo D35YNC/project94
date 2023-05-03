@@ -122,7 +122,6 @@ class Listener:
         self.__autorun = False
         self.__drop_duplicates = True
         self.__suppress_banners = True
-        self.__its_first_run = True
 
     def setup(self, autorun: bool, enable_ssl: bool, ca: list = None, cert: list[tuple] = None, drop_duplicates: bool = True, suppress_banners: bool = True):
         if enable_ssl:
@@ -192,6 +191,10 @@ class Listener:
         self.stop()
         return self.start()
 
+    def change_state(self, new_state: ListenerStateEnum):
+        if new_state in self.__states:
+            self.__state = self.__states[new_state]
+
     @property
     def is_running(self):
         return self.__state is self.__states[ListenerStateEnum.Running] and self.__socket is not None
@@ -258,10 +261,6 @@ class Listener:
     @property
     def state(self) -> str:
         return self.__state.name
-
-    def change_state(self, new_state: ListenerStateEnum):
-        if new_state in self.__states:
-            self.__state = self.__states[new_state]
 
     def save(self) -> dict:
         return {
