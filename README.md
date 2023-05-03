@@ -45,25 +45,29 @@ EZ
 ### CLI interface info
 Default command set:
 ```
-/show               displays information of specified type
-/interact           start interactive shell
-/exit               shutdown project94
-/help               display help message
-/bindshell          connects to bind shell
-/encoding           changes active session encoding
-/kill               kill active or specified session
-/goto               switch to another session
-/cmd                executes the command in the current or each session
+bind_shell          connects to bind shell
+cmd                 executes the command in the current or each session
+encoding            changes active session encoding
+exit                shutdown project94
+goto                switch to another session
+help                display help message
+interact            start interactive shell
+kill                kill active or specified session
+listener            listeners management
+session             sessions management
 ```
 
 U can get extended help for every command:
 ```
-[NO_SESSION]>> /help /show
-[*] Help: /show
+[NO_SESSION]>> help session
+[*] Help: session
 Description: displays information of specified type
-sessions - shows list of sessions and information about them
-info     - shows information about active session
-Usage: /show {sessions, info}
+list       - shows list of sessions and some information about them
+status     - shows information about active session
+Usage:
+ session {list status} ARGS
+ session list
+ session status [SESSION_ID]
 ```
 
 ### Demo
