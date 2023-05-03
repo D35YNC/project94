@@ -209,7 +209,7 @@ class Project94:
                 else:
                     self.active_session.send_command(" ".join(command))
             elif command[0] in self.commands:
-                self.commands[command[0]](*command, app=self)
+                self.commands[command[0]](*(command[1:]), app=self)
             else:
                 Printer.error("Unknown command")
 

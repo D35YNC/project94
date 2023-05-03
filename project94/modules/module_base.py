@@ -10,13 +10,15 @@ def command(*, name: str = None, description: str = None, long_description: str 
 
 class Command:
     def __init__(self, parent=None, func: callable = None, name: str = "", description: str = "", long_description: str = ""):
-        if parent and isinstance(parent, Command):
-            self.__parent = parent
-        else:
-            # TODO: exception
-            self.__parent = None
+        self.__parent = None
+        if parent:
+            if isinstance(parent, Command):
+                self.__parent = parent
+            else:
+                raise TypeError("Parent is not Command object")
 
-        self.__func = func if func else lambda *args, **kwargs: print(f"Usage: {self.usage}")
+        self.__func = func if func is not None else lambda *args, **kwargs: print(f"Usage: {self.usage}")
+        self.__module_instance = None
         self.__name = name.lower() if name else func.__name__.lower()
         self.__description = description
         self.__long_description = long_description
@@ -47,24 +49,25 @@ class Command:
 
         self._update_usage_string()
 
+    def __get__(self, instance, owner):
+        if not self.__module_instance:
+            self.__module_instance = instance
+        return self
+
     def __call__(self, *args, **kwargs):
         # TODO:
         #  Unlimited nesting of commands
-        if self.has_subcommands and 1 < len(args):
+        if self.has_subcommands and 1 <= len(args):
             for subcmd in self.__subcommands:
-                if args[0] == self.name and args[1] == subcmd.name:
-                    if subcmd.required_args_count <= len(args[2:]) <= subcmd.args_count or subcmd.args_count == -1:
-                        subcmd(*(args[2:]), **kwargs)
-                    else:
-                        print(f"Use: ", subcmd.usage)
-                    return
+                if args[0] == subcmd.name:
+                    return subcmd(*(args[1:]), **kwargs)
 
         if 0 == len(args) == self.args_count:
-            self.__func(self, **kwargs)
-        elif (self.required_args_count <= len(args) <= self.args_count or self.args_count == -1) and self.is_subcommand:
-            self.__func(self, *args, **kwargs)
-        elif (self.required_args_count <= len(args) - 1 <= self.args_count or self.args_count == -1) and not self.is_subcommand:
-            self.__func(self, *args[1:], **kwargs)
+            # Command completely without args
+            self.__func(self.__module_instance, **kwargs)
+        elif self.required_args_count <= len(args) <= self.args_count or self.args_count == -1:
+            # Command has 1+ args
+            self.__func(self.__module_instance, *args, **kwargs)
         else:
             print("Use:", self.usage)
 
