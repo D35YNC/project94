@@ -156,7 +156,10 @@ class Project94:
             for socket_fd in error_sockets:
                 # MMMMM?
                 if listener := self.get_listener(fd=socket_fd):
-                    listener.stop()
+                    try:
+                        listener.stop()
+                    except ListenerStopError:
+                        pass
                     Printer.error(f"Listener {listener.lhost}:{listener.lport} error")
                 elif session := self.get_session(fd=socket_fd):
                     self.close_session(session)
@@ -168,7 +171,10 @@ class Project94:
             for listener in self.listeners:
                 self.config["listeners"].append(listener.save())
                 if listener.is_running:
-                    listener.stop()
+                    try:
+                        listener.stop()
+                    except ListenerStopError:
+                        pass
                     Printer.warning(f"Listener {listener} stopped")
             json.dump(self.config, open(self.__config_path, mode='w', encoding="utf-8"))
 
