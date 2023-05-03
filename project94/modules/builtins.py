@@ -34,24 +34,22 @@ class Builtins(Module):
     @cmd.subcommand(name="current", description="execute CMDLINE in current session")
     def cmd_current(self, *cmdline, **kwargs):
         app = kwargs.get("app")
-        if len(cmdline) == 0:
-            Printer.error(kwargs.get("command").usage)
+        if not cmdline or len(cmdline) == 0:
+            Printer.error("cmdline not specified")
             return
 
-        if app.active_session:
-            if cmdline:
-                app.active_session.send_command(" ".join(cmdline))
-            else:
-                Printer.error(kwargs.get("command").usage)
+        if session := app.active_session:
+            session.send_command(" ".join(cmdline))
         else:
             Printer.warning("Current session is FUCKING DEAD")
 
     @cmd.subcommand(name="each", description="execute CMDLINE in each sessions")
     def cmd_each(self, *cmdline, **kwargs):
         app = kwargs.get("app")
-        if len(cmdline) == 0:
-            Printer.error(kwargs.get("command").usage)
+        if not cmdline or len(cmdline) == 0:
+            Printer.error("cmdline not specified")
             return
+
         for id_ in app.sessions:
             app.sessions[id_].send_command(" ".join(cmdline))
 
@@ -65,14 +63,14 @@ class Builtins(Module):
             Printer.warning("Current session is FUCKING DEAD")
 
     @encoding.subcommand(name="autodetect", description="Trying to autodetect encoding")
-    def autodetect_encoding(self, *cmd, **kwargs):
+    def autodetect_encoding(self, *cmdline, **kwargs):
         app = kwargs.get("app")
         if session := app.active_session:
-            if len(cmd) == 0:
-                cmd = "whoami"
+            if len(cmdline) == 0:
+                cmdline = "whoami"
             else:
-                cmd = ' '.join(cmd)
-            data = session.send_command_and_recv(cmd, True)
+                cmdline = ' '.join(cmdline)
+            data = session.send_command_and_recv(cmdline, True)
             detect = charset_normalizer.detect(data)
             Printer.info(f"Encoding detected {detect['encoding']}. Try it")
         else:
@@ -360,7 +358,7 @@ class Builtins(Module):
                     listener.load_cert(cert, key or None)
                     Printer.info("Cert is set?")
             case _:
-                Printer.error(kwargs.get("command").usage)
+                Printer.error("No setting specified: [all, ca, cert, key]")
 
     @listener.subcommand(name="autorun", description="enables or disables autorun")
     def listener_autorun_state_change(self, name, state, **kwargs):
