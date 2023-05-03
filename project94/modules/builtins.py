@@ -12,7 +12,7 @@ from ..utils import Printer
 
 class Builtins(Module):
     cmd = Command(name="cmd", description="executes the command in the current or each session")
-    session = Command(name="session", description="displays information of specified type")
+    session = Command(name="session", description="sessions management")
     listener = Command(name="listener", description="listeners management")
 
     @command(name="bind_shell", description="connects to bind shell")
@@ -89,9 +89,9 @@ class Builtins(Module):
     @command(name="goto",
              description="switch to another session",
              long_description="Session can be identified by ID (hash) or index in sessions list\n"
-                              "U can view ID and index using \"/show sessions\" command\n"
+                              "U can view ID and index using \"session list\" command\n"
                               "ID arg can be specified partially. Ex. session ID - sus0GOvm0Za1100ppa\n"
-                              "U can goto this session with \"/goto sus0\"")
+                              "U can goto this session with \"goto sus0\"")
     def goto(self, session_id: str, **kwargs):
         app = kwargs.get("app")
         if new_session := app.get_session(id_=session_id, idx=session_id):
@@ -154,7 +154,7 @@ class Builtins(Module):
 
     @command(name="kill",
              description="kill active or specified session",
-             long_description="Specifying session works as in \"/goto\" command")
+             long_description="Specifying session works as in \"goto\" command")
     def kill(self, session_id: str = "", **kwargs):
         app = kwargs.get("app")
         if session_id:
