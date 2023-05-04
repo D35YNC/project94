@@ -54,20 +54,20 @@ class Command:
             self.__module_instance = instance
         return self
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, *args):
         # TODO:
         #  Unlimited nesting of commands
         if self.has_subcommands and 1 <= len(args):
             for subcmd in self.__subcommands:
                 if args[0] == subcmd.name:
-                    return subcmd(*(args[1:]), **kwargs)
+                    return subcmd(*(args[1:]))
 
         if 0 == len(args) == self.args_count:
             # Command completely without args
-            self.__func(self.__module_instance, **kwargs)
+            self.__func(self.__module_instance)
         elif self.required_args_count <= len(args) <= self.args_count or self.args_count == -1:
             # Command has 1+ args
-            self.__func(self.__module_instance, *args, **kwargs)
+            self.__func(self.__module_instance, *args)
         else:
             print("Use:", self.usage)
 
@@ -142,7 +142,7 @@ class Command:
 
 class Module(abc.ABC):
     def __init__(self, app):
-        self._app = app
+        self.app = app
         self.__commands: dict[str, Command] = {}
 
     @property

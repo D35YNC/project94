@@ -57,30 +57,33 @@ class Project94:
                 self.config = {"listeners": []}
         if 0 < len(self.config["listeners"]):
             Printer.info("Loading listeners...")
-        for settings in self.config["listeners"]:
-            try:
-                listener = Listener.load(self, settings)
-            except ListenerInitError as ex:
-                Printer.error(str(ex))
-            else:
-                self.listeners.append(listener)
-                Printer.success(f"{listener} loaded")
-        print()
+            for settings in self.config["listeners"]:
+                try:
+                    listener = Listener.load(settings)
+                except ListenerInitError as ex:
+                    Printer.error(str(ex))
+                else:
+                    self.listeners.append(listener)
+                    Printer.success(f"{listener} loaded")
+            print()
 
     def main(self):
         for mod in self.__modules:
             mod.on_ready()
 
-        Printer.info("Autorun listeners...")
-        for listener in self.listeners:
-            if listener.autorun:
-                try:
-                    sock = listener.start()
-                except ListenerStartError as ex:
-                    Printer.error(str(ex))
-                else:
-                    self.add_listener_sock(sock)
-                    Printer.success(f"{listener} started")
+        arn = [listener for listener in self.listeners if listener.autorun]
+        if 0 < len(arn):
+            Printer.info("Autorun listeners...")
+            for listener in arn:
+                if listener.autorun:
+                    try:
+                        sock = listener.start()
+                    except ListenerStartError as ex:
+                        Printer.error(str(ex))
+                    else:
+                        self.add_listener_sock(sock)
+                        Printer.success(f"{listener} started")
+            print()
 
         th = threading.Thread(target=self.interface, daemon=True)
         th.start()
@@ -108,9 +111,11 @@ class Project94:
                             session_socket = listener.ssl_context.wrap_socket(session_socket, True)
                         except ssl.SSLCertVerificationError:
                             Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. Bad certificate")
+                            self.__restore_prompt()
                             continue
                         except ssl.SSLError as ex:
                             Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}")
+                            self.__restore_prompt()
                             continue
                     if session := Session(session_socket, listener):
                         self.register_session(session)
@@ -181,7 +186,7 @@ class Project94:
     def interface(self):
         # TODO
         #  [-] 1/DISABLING AUTOCOMPLETION IN INTERACTIVE MODE
-        #   Logic changed <it will not be fixed yet>
+        #    Logic changed <it will not be fixed yet>
         #  [-] 2/FIX DELETION PROMPT WHEN DELETE SEMI-COMPLETED COMMAND
         #    Partiladadry fixed. Context not dislpaying on autocompletion
         #  [-] 3/FIX <ENTER> PRESSING WHEN EXIT WITH NON EMPTY INPUT
@@ -209,7 +214,7 @@ class Project94:
                 else:
                     self.active_session.send_command(" ".join(command))
             elif command[0] in self.commands:
-                self.commands[command[0]](*(command[1:]), app=self)
+                self.commands[command[0]](*(command[1:]))
             else:
                 Printer.error("Unknown command")
 
@@ -411,6 +416,7 @@ class Project94:
 
     def __restore_prompt(self):
         print(self.context, end='', flush=True)
+        print(readline.get_line_buffer(), end='', flush=True)
 
 
 def entry():
