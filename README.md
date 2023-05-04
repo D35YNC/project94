@@ -31,13 +31,12 @@ Use one of these methods:
   ### Or keep on master for 'pre-release'
   
   sudo pip3 install .
-  ### or just for run
-  python3 project94.py -h
+  ### or just for run dont do anything xdd
   ```
-  
+
 **STEP 2** Run  
 - pip installation: `project94 --help`
-- git installation: `python3 -m project94 -V` or `python3 project94.py -V`
+- git installation: `python3 project94.py --help`
 
 **STEP 3**  
 EZ
