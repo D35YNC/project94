@@ -91,9 +91,7 @@ class Unknown(ListenerState):
 
 
 class Listener:
-    def __init__(self, app, name: str, ip: str, port: int):
-        if app is None:
-            raise ListenerInitError("App is None")
+    def __init__(self, name: str, ip: str, port: int):
         if name.strip() == "" or ' ' in name:
             raise ListenerInitError("Incorrect name")
         if not isinstance(port, int):
@@ -101,7 +99,6 @@ class Listener:
         elif not (0 < port < 0xFFFF):
             raise ListenerInitError("Port is not in range 0-65535")
 
-        self.app = app
         self.__name = name
         self.__lhost = ip
         self.__lport = port
@@ -123,33 +120,40 @@ class Listener:
         self.__drop_duplicates = True
         self.__suppress_banners = True
 
-    def setup(self, autorun: bool, enable_ssl: bool, ca: list = None, cert: list[tuple] = None, drop_duplicates: bool = True, suppress_banners: bool = True):
-        if enable_ssl:
-            self.__ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-            self.__ssl_context.verify_mode = ssl.VerifyMode.CERT_REQUIRED
-            self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
-            self.__state = self.__states[ListenerStateEnum.Stopped]
-            if ca:
-                if isinstance(ca, list):
-                    for cafile in ca:
-                        if not self.load_ca(cafile):
-                            raise ListenerInitError(f"Cant load ca cert {cafile}")
-                else:
-                    raise ListenerInitError("list of ca certs is not list")
-            if cert:
-                if isinstance(cert, list):
-                    for certfile in cert:
-                        if len(certfile) == 2:
-                            if not self.load_cert(*certfile):
-                                raise ListenerInitError(f"Cant load cert {certfile}")
-                else:
-                    raise ListenerInitError("list of certs is not list")
-        else:
-            self.__state = self.__states[ListenerStateEnum.Ready]
-
+    def setup(self, autorun: bool, drop_duplicates: bool, suppress_banners: bool, ssl_enabled: bool = False):
+        if self.__state is not self.__states[ListenerStateEnum.Unknown]:
+            return
+        
         self.__autorun = autorun
         self.__drop_duplicates = drop_duplicates
         self.__suppress_banners = suppress_banners
+
+        if not ssl_enabled:
+            self.__state = self.__states[ListenerStateEnum.Ready]
+
+    def setup_ssl(self, ca: list = None, cert: list = None):
+        if self.__state is not self.__states[ListenerStateEnum.Unknown]:
+            return
+        if ca is not None and not isinstance(ca, list):
+            raise ListenerInitError("list of ca certs is not list")
+        if cert is not None and not isinstance(cert, list):
+            raise ListenerInitError("list of certs is not list")
+
+        self.__state = self.__states[ListenerStateEnum.Stopped]
+
+        self.__ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+        self.__ssl_context.verify_mode = ssl.VerifyMode.CERT_REQUIRED
+        self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
+
+        if ca:
+            for cafile in ca:
+                if not self.load_ca(cafile):
+                    raise ListenerInitError(f"Cant load ca cert {cafile}")
+        if cert:
+            for certfile in cert:
+                if len(certfile) == 2:
+                    if not self.load_cert(*certfile):
+                        raise ListenerInitError(f"Cant load cert {certfile}")
 
     def load_ca(self, cafile) -> bool | None:
         if self.ssl_enabled:
@@ -220,19 +224,16 @@ class Listener:
         return self.__lport
 
     @property
+    def state(self) -> str:
+        return self.__state.name
+
+    @property
     def ssl_enabled(self) -> bool:
         return self.__ssl_context is not None
 
     @property
     def ssl_context(self):
         return self.__ssl_context
-
-    @property
-    def certs_status(self) -> dict:
-        if self.ssl_enabled:
-            return self.__ssl_context.cert_store_stats()
-        else:
-            return {}
 
     @property
     def drop_duplicates(self):
@@ -258,10 +259,6 @@ class Listener:
     def autorun(self, value):
         self.__autorun = True if value else False
 
-    @property
-    def state(self) -> str:
-        return self.__state.name
-
     def save(self) -> dict:
         return {
             "name": self.name,
@@ -276,9 +273,14 @@ class Listener:
         }
 
     @staticmethod
-    def load(app, settings):
-        listener = Listener(app, settings.get("name"), settings.get("ip", "0.0.0.0"), settings.get("port", 4444))
-        listener.setup(settings.get("autorun"), settings.get("ssl"), settings.get("ca", []), settings.get("cert", []))
+    def load(settings):
+        listener = Listener(settings.get("name", ""), settings.get("ip", "0.0.0.0"), settings.get("port", 1337))
+        listener.setup(settings.get("autorun", False),
+                       settings.get("drop_duplicates", True),
+                       settings.get("suppress_banners", True),
+                       settings.get("ssl", False))
+        if settings.get("ssl", False):
+            listener.setup_ssl(settings.get("ca", []), settings.get("cert", []))
         return listener
 
     def __str__(self):
