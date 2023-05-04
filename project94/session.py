@@ -25,6 +25,13 @@ class Session:
         self.extended_info = {}
 
     def set_callbacks(self, read_callback=None, write_callback=None, error_callback=None):
+        """
+        SUSSY CALLBACKS
+        :param read_callback:
+        :param write_callback:
+        :param error_callback:
+        :return:
+        """
         # TODO ADD REFERENCE TO NOTE IN project94.py
         if read_callback:
             self.__on_read = read_callback
@@ -34,31 +41,55 @@ class Session:
             self.__on_error = error_callback
 
     @property
-    def socket(self) -> socket.socket:
+    def socket(self) -> socket.socket | ssl.SSLSocket:
+        """
+        :return: Session `socket` object
+        """
         return self.__socket
 
     @property
     def listener(self):
+        """
+        :return: Pointer to listener that accept this session
+        """
         return self.__listener
 
     @property
     def rhost(self):
+        """
+        :return: Remote address
+        """
         return self.__rhost
 
     @property
     def rport(self):
+        """
+        :return: Remote port
+        """
         return self.__rport
 
     @property
     def ssl_enabled(self):
+        """
+        Is ssl enabled
+        :return: `True` if ssl enabled and active
+        """
         return isinstance(self.__socket, ssl.SSLSocket)
 
     @property
-    def hash(self):
+    def cert(self) -> dict:
+        """
+        Alias for SSLSocket.getpeercert()
+        :return: `dict` that contain certificate
+        """
+        return self.socket.getpeercert()
+
+    @property
+    def hash(self) -> str:
         return self.__session_hash
 
     @property
-    def encoding(self):
+    def encoding(self) -> str:
         return self.__encoding
 
     @encoding.setter
@@ -71,11 +102,18 @@ class Session:
             self.__encoding = value
 
     def next_command(self):
+        """
+        :return: `str` or `None` from session queue
+        """
         if not self.__commands_queue.empty():
             return self.__commands_queue.get_nowait()
         return None
 
-    def send_command(self, command):
+    def send_command(self, command: str):
+        """
+        Just write command to session queue and notify main thread with `on_write` callback
+        :param command: Just `str` cmdline
+        """
         if not self.interactive:
             print(f"> \"{command}\" -> {self.rhost}:{self.rport}")
         self.__commands_queue.put_nowait(f"{command}\n")
@@ -84,10 +122,10 @@ class Session:
     def send_command_and_recv(self, command: str, return_raw: bool = False) -> str | bytes | None:
         try:
             self.__on_read(self)
-            time.sleep(1)
             if not command.endswith('\n'):
                 command += '\n'
             self.socket.send(command.encode(self.__encoding))
+            time.sleep(1)
             data = networking.recvall(self.socket)
             try:
                 if not return_raw:
@@ -100,6 +138,7 @@ class Session:
             self.__on_read(self)
 
     def kill(self):
+        """KILL THAT SESSION"""
         self.__on_error(self)
 
     def __str__(self):
