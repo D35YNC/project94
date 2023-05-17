@@ -169,3 +169,6 @@ class Module(abc.ABC):
 
     def on_session_dead(self, *args, **kwargs):
         pass
+
+    def on_command_error(self, *args, **kwargs):
+        pass
