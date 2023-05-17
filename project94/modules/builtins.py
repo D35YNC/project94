@@ -6,7 +6,8 @@ import datetime
 import charset_normalizer
 
 from .module_base import *
-from ..listener import Listener, ListenerInitError, ListenerStartError, ListenerStopError
+from ..listener import Listener
+from ..listener import ListenerInitError, ListenerStartError, ListenerStopError
 from ..session import Session
 from ..utils.printer import Printer, print_certificate
 

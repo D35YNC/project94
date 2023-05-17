@@ -8,8 +8,10 @@ import socket
 import ssl
 import threading
 
-from .listener import Listener, ListenerInitError, ListenerStartError, ListenerStopError
-from .modules.module_base import Module, Command
+from .listener import Listener
+from .listener import ListenerInitError, ListenerStartError, ListenerStopError
+from .modules.module_base import Command
+from .modules.module_base import Module
 from .session import Session
 from .utils import CommandsCompleter
 from .utils import Printer
