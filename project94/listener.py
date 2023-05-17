@@ -49,9 +49,6 @@ class Running(ListenerState):
         raise ListenerStartError(f"{self._listener} already running")
 
     def stop(self):
-        for s in self._listener.sockets:
-            if session := self._listener.app.get_session(fd=s):
-                self._listener.app.close_session(session)
         self._listener.listen_socket.shutdown(socket.SHUT_RDWR)
         self._listener.listen_socket.close()
         self._listener.change_state(ListenerStateEnum.Ready)
@@ -118,15 +115,13 @@ class Listener:
 
         self.__autorun = False
         self.__drop_duplicates = True
-        self.__suppress_banners = True
 
-    def setup(self, autorun: bool, drop_duplicates: bool, suppress_banners: bool, ssl_enabled: bool = False):
+    def setup(self, autorun: bool, drop_duplicates: bool, ssl_enabled: bool = False):
         if self.__state is not self.__states[ListenerStateEnum.Unknown]:
             return
         
         self.__autorun = autorun
         self.__drop_duplicates = drop_duplicates
-        self.__suppress_banners = suppress_banners
 
         if not ssl_enabled:
             self.__state = self.__states[ListenerStateEnum.Ready]
@@ -241,15 +236,7 @@ class Listener:
 
     @drop_duplicates.setter
     def drop_duplicates(self, value):
-        self.__drop_duplicates = True if value else False
-
-    @property
-    def suppress_banners(self):
-        return self.__suppress_banners
-
-    @suppress_banners.setter
-    def suppress_banners(self, value):
-        self.__suppress_banners = True if value else False
+        self.__drop_duplicates = bool(value)
 
     @property
     def autorun(self):
@@ -257,7 +244,7 @@ class Listener:
 
     @autorun.setter
     def autorun(self, value):
-        self.__autorun = True if value else False
+        self.__autorun = bool(value)
 
     def save(self) -> dict:
         return {
@@ -269,15 +256,12 @@ class Listener:
             "cert": self.__cert,
             "autorun": self.autorun,
             "drop_duplicates": self.drop_duplicates,
-            "suppress_banners": self.suppress_banners
         }
 
     @staticmethod
     def load(settings):
         listener = Listener(settings.get("name", ""), settings.get("ip", "0.0.0.0"), settings.get("port", 1337))
-        listener.setup(settings.get("autorun", False),
-                       settings.get("drop_duplicates", True),
-                       settings.get("suppress_banners", True),
+        listener.setup(settings.get("autorun", False), settings.get("drop_duplicates", True),
                        settings.get("ssl", False))
         if settings.get("ssl", False):
             listener.setup_ssl(settings.get("ca", []), settings.get("cert", []))
