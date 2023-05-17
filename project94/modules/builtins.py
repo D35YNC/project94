@@ -1,6 +1,7 @@
 import os.path
 import socket
 import time
+import datetime
 
 import charset_normalizer
 
@@ -11,7 +12,6 @@ from ..utils.printer import Printer, print_certificate
 
 
 class Builtins(Module):
-    # cmd = Command(name="cmd", description="executes the command in the current or each session")
     session = Command(name="session", description="sessions management")
     listener = Command(name="listener", description="listeners management")
 
@@ -29,26 +29,6 @@ class Builtins(Module):
             Printer.error(f"Cant connect to {ip}:{port}")
         else:
             self.app.register_session(Session(sock, None))
-
-    # @cmd.subcommand(name="current", description="execute CMDLINE in current session")
-    # def cmd_current(self, *cmdline):
-    #     if not cmdline or len(cmdline) == 0:
-    #         Printer.error("cmdline not specified")
-    #         return
-    #
-    #     if session := self.app.active_session:
-    #         session.send_command(" ".join(cmdline))
-    #     else:
-    #         Printer.warning("Current session is FUCKING DEAD")
-    #
-    # @cmd.subcommand(name="each", description="execute CMDLINE in each sessions")
-    # def cmd_each(self, *cmdline):
-    #     if not cmdline or len(cmdline) == 0:
-    #         Printer.error("cmdline not specified")
-    #         return
-    #
-    #     for id_ in self.app.sessions:
-    #         self.app.sessions[id_].send_command(" ".join(cmdline))
 
     @command(name="encoding", description="changes active session encoding")
     def encoding(self, new_encoding: str):
@@ -143,7 +123,6 @@ class Builtins(Module):
                 for msg in self.app.active_session.recv_data:
                     print(msg, end='')
                 self.app.active_session.recv_data.clear()
-
         else:
             Printer.warning("Current session is FUCKING DEAD")
 
@@ -302,7 +281,7 @@ class Builtins(Module):
             Printer.warning(f"Listener \"{name}\" not found")
 
     @listener.subcommand(name="ssl", description="managing listener ssl certificates")
-    def listener_ssl(self, action, name):
+    def listener_ssl(self, name, action):
 
         def get_filename_input(prompt):
             value = ""
@@ -322,7 +301,7 @@ class Builtins(Module):
             return
 
         match action.lower():
-            case "all" | "setup":
+            case "setup":
                 ca = get_filename_input("CA [ENTER FOR SKIP]")
                 if ca is None:
                     return
@@ -333,15 +312,12 @@ class Builtins(Module):
                 if key is None:
                     return
 
-                if action.lower() == "setup":
+                try:
                     listener.setup_ssl([ca], [(cert, key if key else None)])
+                except ListenerInitError as error:
+                    Printer.error(str(error))
                 else:
-                    if ca:
-                        if listener.load_ca(ca):
-                            Printer.info(f"CA {ca} loaded")
-                    if cert:
-                        if listener.load_cert(cert, key or None):
-                            Printer.info(f"CERT {cert}{f' and KEY {key} ' if key is not None else ' '}loaded")
+                    Printer.success("Ok")
             case "ca":
                 ca = get_filename_input("CA")
                 if ca is None:
@@ -363,7 +339,7 @@ class Builtins(Module):
                 Printer.error("Bad action specified, need: [all, setup, ca, cert, key]")
 
     @listener.subcommand(name="enable", description="enables listener autorun")
-    def listener_enable_autorun(self, name, setting):
+    def listener_enable_autorun(self, name):
         if listener := self.app.get_listener(name=name):
             if listener.autorun:
                 Printer.warning(f"Listener \"{listener.name}\" autorun is already enabled")
@@ -374,7 +350,7 @@ class Builtins(Module):
             Printer.warning(f"Listener \"{name}\" not found")
 
     @listener.subcommand(name="disable", description="disables listener autorun")
-    def listener_enable_autorun(self, name, setting):
+    def listener_disable_autorun(self, name):
         if listener := self.app.get_listener(name=name):
             if not listener.autorun:
                 Printer.warning(f"Listener \"{listener.name}\" autorun is already disabled")
@@ -403,20 +379,20 @@ class Builtins(Module):
 
     @session.subcommand(name="status", description="shows information about active session")
     def sessions_status(self, session_id: str = ""):
-        def print_session(session_obj):
-            print(f"Hash: {session_obj.hash}")
-            print(f"From: {session_obj.rhost}:{session_obj.rport}")
-            print(f"Encoding: {session_obj.encoding}")
-            if session_obj.ssl_enabled:
+        def print_session(session):
+            print(f"Hash: {session.hash}")
+            print(f"From: {session.rhost}:{session.rport}")
+            print(f"When: {datetime.datetime.fromtimestamp(session.timestamp).strftime('%m.%d %H:%M:%S')}")
+            print(f"Encoding: {session.encoding}")
+            if session.ssl_enabled:
                 print(f"SSL: Enabled")
                 print("Cert:")
-                cert = session_obj.cert
-                print_certificate(cert)
+                print_certificate(session.cert)
             else:
                 print(f"SSL: Disabled")
 
-            for ext in session_obj.extended_info:
-                print(f"{ext}: {session_obj.extended_info[ext]}")
+            for ext in session.extended_info:
+                print(f"{ext}: {session.extended_info[ext]}")
 
         if session_id:
             if session := self.app.get_session(id_=session_id, idx=session_id):
