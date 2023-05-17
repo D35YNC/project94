@@ -153,11 +153,11 @@ class Builtins(Module):
     def kill(self, session_id: str = ""):
         if session_id:
             if session := self.app.get_session(id_=session_id, idx=session_id):
-                self.app.close_session(session)
+                self.app.close_session(session, its_manual_kill=True)
             else:
                 Printer.warning(f"Session \"{session_id}\" not found")
         elif session := self.app.active_session:
-            self.app.close_session(session)
+            self.app.close_session(session, its_manual_kill=True)
         else:
             Printer.warning("Current session is FUCKING DEAD")
 

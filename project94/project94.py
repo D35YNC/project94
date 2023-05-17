@@ -113,9 +113,8 @@ class Project94:
                         if not data:
                             # When session is None then sessino killed manually
                             # Else session DO SUICIDE
-                            Printer.warning(f"Session {session.rhost}:{session.rport} dead")
+                            self.close_session(session)
                             self.__restore_prompt()
-                            self.close_session(session, False)
                             continue
                         try:
                             data = data.decode(session.encoding)
@@ -185,9 +184,8 @@ class Project94:
                     try:
                         self.active_session.socket.send((" ".join(command) + "\n").encode(self.active_session.encoding))
                     except (socket.error, OSError):
-                        Printer.error(f"Cant send data to session {self.active_session.rhost}:{self.active_session.rport}")
-                        self.__restore_prompt()
                         self.close_session(self.active_session)
+                        self.__restore_prompt()
 
             elif command[0] in self.commands:
                 cmd = command[0]
@@ -220,11 +218,11 @@ class Project94:
 
         Printer.info(f"New session: {session_addr[0]}:{session_addr[1]}")
 
-    def close_session(self, session: Session, show_msg: bool = True):
+    def close_session(self, session: Session, *, its_manual_kill: bool = False):
         """
         Gracefully close connection
         :param session: `Session` to close
-        :param show_msg: Show a message that the session is closed
+        :param its_manual_kill: Write a message that the session was interrupted manually or died by them
         """
         # Notifying modules about dead session
         for mod in self.__modules:
@@ -241,8 +239,11 @@ class Project94:
             session.socket.close()
         except (socket.error, OSError):
             pass
-        if show_msg:
+
+        if its_manual_kill:
             Printer.warning(f"Session {session.rhost}:{session.rport} killed")
+        else:
+            Printer.warning(f"Session {session.rhost}:{session.rport} dead")
 
     def add_listener_sock(self, sock: socket.socket):
         self.__epoll.register(sock.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
@@ -327,11 +328,6 @@ class Project94:
         else:
             return f"{Printer.context('NO_SESSION')}>> "
 
-    # TODO NOTE ABOUT THIS CALLBACKS
-
-    def session_error_callback(self, session: Session):
-        self.close_session(session)
-
     def shutdown(self, *args):
         """Gracefully exit"""
         Printer.warning("Exit...")
@@ -339,7 +335,7 @@ class Project94:
         for mod in self.__modules:
             mod.on_shutdown()
         while 0 < len(self.sessions):
-            self.close_session(self.sessions[list(self.sessions.keys())[0]])
+            self.close_session(self.sessions[list(self.sessions.keys())[0]], its_manual_kill=True)
 
     def __load_modules(self):
         Printer.info("Loading modules...")
