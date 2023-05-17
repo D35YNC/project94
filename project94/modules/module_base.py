@@ -50,7 +50,7 @@ class Command:
         self._update_usage_string()
 
     def __get__(self, instance, owner):
-        if not self.__module_instance:
+        if not self.__module_instance and isinstance(instance, Module):
             self.__module_instance = instance
         return self
 
@@ -97,7 +97,7 @@ class Command:
 
     @property
     def module(self):
-        return self.__module__
+        return self.__module_instance
 
     @property
     def name(self):
