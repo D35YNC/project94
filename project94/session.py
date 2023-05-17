@@ -1,5 +1,4 @@
 import codecs
-import queue
 import socket
 import ssl
 import time
@@ -15,6 +14,7 @@ class Session:
         self.__rhost, self.__rport = sock.getpeername()
         self.__encoding = "utf-8"
         self.__session_hash = networking.create_session_hash(self.rhost, self.rport)
+        self.__timestamp = time.time()
 
         self.recv_data = []
         self.interactive = False
@@ -80,6 +80,10 @@ class Session:
             self.__encoding = "utf-8"
         else:
             self.__encoding = value
+
+    @property
+    def timestamp(self):
+        return self.__timestamp
 
     def __str__(self):
         return f"{self.hash[:8]} <{self.rhost}:{self.rport}>"
