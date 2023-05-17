@@ -7,7 +7,6 @@ import signal
 import socket
 import ssl
 import threading
-import time
 
 from .listener import Listener, ListenerInitError, ListenerStartError, ListenerStopError
 from .modules.module_base import Module, Command
@@ -30,7 +29,7 @@ class Project94:
         signal.signal(signal.SIGTERM, self.shutdown)
 
         self.commands: dict[str, Command] = {}
-        self.__modules: list[Module] = []
+        self.__modules: dict[str, Module] = {}
         self.__load_modules()
 
         self.__active_session: Session = None
@@ -65,7 +64,7 @@ class Project94:
 
     def main(self):
         for mod in self.__modules:
-            mod.on_ready()
+            self.__modules[mod].on_ready()
 
         arn = [listener for listener in self.listeners if listener.autorun]
         if 0 < len(arn):
@@ -156,9 +155,7 @@ class Project94:
         # TODO
         #  [-] 1/DISABLING AUTOCOMPLETION IN INTERACTIVE MODE
         #    Logic changed <it will not be fixed yet>
-        #  [-] 2/FIX DELETION PROMPT WHEN DELETE SEMI-COMPLETED COMMAND
-        #    Partiladadry fixed. Context not dislpaying on autocompletion
-        #  [-] 3/FIX <ENTER> PRESSING WHEN EXIT WITH NON EMPTY INPUT
+        #  [-] 2/FIX <ENTER> PRESSING WHEN EXITING WITH NON EMPTY INPUT
         #    ? <it will not be fixed yet>
         completer = CommandsCompleter(self.commands)
         readline.set_completer_delims("\t")
@@ -193,7 +190,7 @@ class Project94:
                 try:
                     self.commands[cmd](*args)
                 except Exception as error:
-                    self.__modules[self.commands[command[0]].module].on_command_error(error, cmd, args)
+                    self.commands[cmd].module.on_command_error(error, cmd, args)
             else:
                 Printer.error("Unknown command")
 
@@ -214,7 +211,7 @@ class Project94:
         self.sessions[session.hash] = session
 
         for mod in self.__modules:
-            mod.on_session_ready(session)
+            self.__modules[mod].on_session_ready(session)
 
         Printer.info(f"New session: {session_addr[0]}:{session_addr[1]}")
 
@@ -226,7 +223,7 @@ class Project94:
         """
         # Notifying modules about dead session
         for mod in self.__modules:
-            mod.on_session_dead(session)
+            self.__modules[mod].on_session_dead(session)
         self.__epoll.unregister(session.socket.fileno())
         if self.active_session is session:
             self.active_session = None
@@ -333,7 +330,7 @@ class Project94:
         Printer.warning("Exit...")
         self.EXIT.set()
         for mod in self.__modules:
-            mod.on_shutdown()
+            self.__modules[mod].on_shutdown()
         while 0 < len(self.sessions):
             self.close_session(self.sessions[list(self.sessions.keys())[0]], its_manual_kill=True)
 
@@ -352,22 +349,22 @@ class Project94:
             try:
                 mod = cls(self)
             except Exception as ex:
-                Printer.error(f"Error while loading mudule {cls.__name__}: {ex}")
+                Printer.error(f"Cant load module {cls.__name__}. {ex}")
                 continue
 
-            if mod in self.__modules:
-                Printer.error(f"Module {mod.name} from {mod.__module__} already imported from {self.__modules.index(mod).__module__}")
+            if mod.name in self.__modules:
+                Printer.error(f"Module {mod.name} from {mod.__module__} already imported from "
+                              f"{self.__modules[mod.name].__module__}")
                 continue
 
-            self.__modules.append(mod)
+            self.__modules[mod.name] = mod
             mod_commands = mod.get_commands()
             for cmd in mod_commands:
                 if mod_commands[cmd].is_subcommand:
                     continue
                 if cmd in self.commands:
-                    Printer.error(f"Command {cmd} from \"{mod.name}\" ({mod_commands[cmd].module.__module__}) already "
-                                  f"imported from \"{self.commands[cmd].module.name}\" "
-                                  f"({self.commands[cmd].module.__module__})")
+                    Printer.error(f"Command {cmd} from \"{mod.name}\" ({mod.__module__}) already imported from "
+                                  f"\"{self.commands[cmd].module.name}\" ({self.commands[cmd].module.__module__})")
                     continue
                 self.commands[cmd] = mod_commands[cmd]
             else:
