@@ -11,7 +11,7 @@ from ..utils.printer import Printer, print_certificate
 
 
 class Builtins(Module):
-    cmd = Command(name="cmd", description="executes the command in the current or each session")
+    # cmd = Command(name="cmd", description="executes the command in the current or each session")
     session = Command(name="session", description="sessions management")
     listener = Command(name="listener", description="listeners management")
 
@@ -30,25 +30,25 @@ class Builtins(Module):
         else:
             self.app.register_session(Session(sock, None))
 
-    @cmd.subcommand(name="current", description="execute CMDLINE in current session")
-    def cmd_current(self, *cmdline):
-        if not cmdline or len(cmdline) == 0:
-            Printer.error("cmdline not specified")
-            return
-
-        if session := self.app.active_session:
-            session.send_command(" ".join(cmdline))
-        else:
-            Printer.warning("Current session is FUCKING DEAD")
-
-    @cmd.subcommand(name="each", description="execute CMDLINE in each sessions")
-    def cmd_each(self, *cmdline):
-        if not cmdline or len(cmdline) == 0:
-            Printer.error("cmdline not specified")
-            return
-
-        for id_ in self.app.sessions:
-            self.app.sessions[id_].send_command(" ".join(cmdline))
+    # @cmd.subcommand(name="current", description="execute CMDLINE in current session")
+    # def cmd_current(self, *cmdline):
+    #     if not cmdline or len(cmdline) == 0:
+    #         Printer.error("cmdline not specified")
+    #         return
+    #
+    #     if session := self.app.active_session:
+    #         session.send_command(" ".join(cmdline))
+    #     else:
+    #         Printer.warning("Current session is FUCKING DEAD")
+    #
+    # @cmd.subcommand(name="each", description="execute CMDLINE in each sessions")
+    # def cmd_each(self, *cmdline):
+    #     if not cmdline or len(cmdline) == 0:
+    #         Printer.error("cmdline not specified")
+    #         return
+    #
+    #     for id_ in self.app.sessions:
+    #         self.app.sessions[id_].send_command(" ".join(cmdline))
 
     @command(name="encoding", description="changes active session encoding")
     def encoding(self, new_encoding: str):
@@ -138,6 +138,12 @@ class Builtins(Module):
         if self.app.active_session:
             Printer.info("Enter interactive mode...")
             self.app.active_session.interactive = True
+
+            if 0 < len(self.app.active_session.recv_data):
+                for msg in self.app.active_session.recv_data:
+                    print(msg, end='')
+                self.app.active_session.recv_data.clear()
+
         else:
             Printer.warning("Current session is FUCKING DEAD")
 
@@ -146,14 +152,18 @@ class Builtins(Module):
              long_description="Specifying session works as in \"goto\" command")
     def kill(self, session_id: str = ""):
         if session_id:
-            if session_obj := self.app.get_session(id_=session_id, idx=session_id):
-                session_obj.kill()
+            if session := self.app.get_session(id_=session_id, idx=session_id):
+                self.app.close_session(session)
             else:
                 Printer.warning(f"Session \"{session_id}\" not found")
         elif session := self.app.active_session:
-            session.kill()
+            self.app.close_session(session)
         else:
             Printer.warning("Current session is FUCKING DEAD")
+
+    #
+    # Listeners
+    #
 
     @listener.subcommand(name="list", description="shows list of listeners and some information about them")
     def listener_list(self):
@@ -223,10 +233,10 @@ class Builtins(Module):
             Printer.error(str(ex))
         else:
             if ans.lower().startswith('y'):
-                listener.setup(False, True, True, True)
-                Printer.info(f"U need initialize certificates. Use \"listener ssl {name} all\" to do it.")
-            else:
                 listener.setup(False, True, True)
+                Printer.info(f"U need initialize certificates. Use \"listener ssl setup {name}\" to do it.")
+            else:
+                listener.setup(False, True)
             Printer.info(f"Listener: {listener} created")
             self.app.listeners.append(listener)
 
@@ -352,29 +362,31 @@ class Builtins(Module):
             case _:
                 Printer.error("Bad action specified, need: [all, setup, ca, cert, key]")
 
-    @listener.subcommand(name="autorun", description="enables or disables autorun")
-    def listener_autorun_state_change(self, name, state):
-        match state.lower():
-            case "e" | "enable" | "1":
-                if listener := self.app.get_listener(name=name):
-                    if listener.autorun:
-                        Printer.warning(f"Listener \"{listener.name}\" autorun is already enabled")
-                    else:
-                        listener.autorun = True
-                        Printer.success(f"Listener \"{listener.name}\" autorun enabled")
-                else:
-                    Printer.warning(f"Listener \"{name}\" not found")
-            case "d" | "disable" | "0":
-                if listener := self.app.get_listener(name=name):
-                    if not listener.autorun:
-                        Printer.warning(f"Listener \"{listener.name}\" autorun is already disabled")
-                    else:
-                        listener.autorun = False
-                        Printer.success(f"Listener \"{listener.name}\" autorun disabled")
-                else:
-                    Printer.warning(f"Listener \"{name}\" not found")
-            case _:
-                Printer.error("state - enable or disable")
+    @listener.subcommand(name="enable", description="enables listener autorun")
+    def listener_enable_autorun(self, name, setting):
+        if listener := self.app.get_listener(name=name):
+            if listener.autorun:
+                Printer.warning(f"Listener \"{listener.name}\" autorun is already enabled")
+            else:
+                listener.autorun = True
+                Printer.success(f"Listener \"{listener.name}\" autorun enabled")
+        else:
+            Printer.warning(f"Listener \"{name}\" not found")
+
+    @listener.subcommand(name="disable", description="disables listener autorun")
+    def listener_enable_autorun(self, name, setting):
+        if listener := self.app.get_listener(name=name):
+            if not listener.autorun:
+                Printer.warning(f"Listener \"{listener.name}\" autorun is already disabled")
+            else:
+                listener.autorun = False
+                Printer.success(f"Listener \"{listener.name}\" autorun disabled")
+        else:
+            Printer.warning(f"Listener \"{name}\" not found")
+
+    #
+    # Sessions
+    #
 
     @session.subcommand(name="list", description="shows list of sessions and some information about them")
     def sessions_list(self):
@@ -415,3 +427,9 @@ class Builtins(Module):
             print_session(session)
         else:
             Printer.warning("Current session is FUCKING DEAD")
+
+    def on_command_error(self, *args, **kwargs):
+        error = args[0]
+        cmd = args[1]
+        arg = args[2]
+        Printer.error(f"{error}, {cmd}, {arg}")

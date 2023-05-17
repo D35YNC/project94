@@ -29,18 +29,14 @@ class Project94:
         signal.signal(signal.SIGINT, self.shutdown)
         signal.signal(signal.SIGTERM, self.shutdown)
 
-        self.__active_session: Session = None
-
         self.commands: dict[str, Command] = {}
         self.__modules: list[Module] = []
+        self.__load_modules()
 
-        self.__read_sockets: list[socket.socket] = []
-        self.__write_sockets: list[socket.socket] = []
-
+        self.__active_session: Session = None
         self.listeners: list[Listener] = []
         self.sessions: dict[str, Session] = {}
-
-        self.__load_modules()
+        self.__epoll = select.epoll()
 
         Printer.colored = not args.disable_colors
 
@@ -89,85 +85,59 @@ class Project94:
         th.start()
 
         while True:
-            # TODO
-            #  1. [ ] DO WHATEVER YOU WANT, BUT REMOVE hisith FUCKING TIMEOUT
-            #  2. [X] ValueError when killin session and socket_fd == -1
-            # I FUCKING HATE THIS TIMEOUT
-            read_sockets, write_sockets, error_sockets = select.select(self.__read_sockets, self.__write_sockets, self.__read_sockets, 0.5) # 0.25
+            events = self.__epoll.poll(1)
 
             if self.EXIT.is_set():
                 break
 
-            for socket_fd in read_sockets:
-                if listener := self.get_listener(fd=socket_fd):
-                    # TODO: REWRITE
-                    if not listener.is_running and listener.listen_socket in self.__read_sockets:
-                        self.__read_sockets.remove(listener.listen_socket)
-                        continue
-
-                    session_socket, session_addr = listener.listen_socket.accept()
-                    if listener.ssl_enabled:
+            for fd, event in events:
+                if event & select.EPOLLIN:
+                    if listener := self.get_listener(fd=fd):
+                        session_socket, session_addr = listener.listen_socket.accept()
+                        if listener.ssl_enabled:
+                            try:
+                                session_socket = listener.ssl_context.wrap_socket(session_socket, True)
+                            except ssl.SSLCertVerificationError:
+                                Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. Bad certificate")
+                                self.__restore_prompt()
+                                continue
+                            except ssl.SSLError as ex:
+                                Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}")
+                                self.__restore_prompt()
+                                continue
+                        if session := Session(session_socket, listener):
+                            self.register_session(session)
+                        self.__restore_prompt()
+                    elif session := self.get_session(fd=fd):
+                        data = recvall(session.socket)
+                        if not data:
+                            # When session is None then sessino killed manually
+                            # Else session DO SUICIDE
+                            Printer.warning(f"Session {session.rhost}:{session.rport} dead")
+                            self.__restore_prompt()
+                            self.close_session(session, False)
+                            continue
                         try:
-                            session_socket = listener.ssl_context.wrap_socket(session_socket, True)
-                        except ssl.SSLCertVerificationError:
-                            Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. Bad certificate")
-                            self.__restore_prompt()
-                            continue
-                        except ssl.SSLError as ex:
-                            Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}")
-                            self.__restore_prompt()
-                            continue
-                    if session := Session(session_socket, listener):
-                        self.register_session(session)
-                    self.__restore_prompt()
-                elif session := self.get_session(fd=socket_fd):
-                    data = recvall(socket_fd)
-                    if not data:
-                        # When session is None then sessino killed manually
-                        # Else session DO SUICIDE
-                        Printer.warning(f"Session {session.rhost}:{session.rport} dead")
-                        self.__restore_prompt()
-                        self.close_session(session, False)
-                        continue
-                    try:
-                        data = data.decode(session.encoding)
-                    except (UnicodeDecodeError, UnicodeError):
-                        Printer.error("Cant decode session output. Check&change encoding.")
-                        self.__restore_prompt()
-                    else:
-                        if not session.interactive:
-                            Printer.success(f"{session.rhost}:{session.rport}")
-                            print(data, end='')
-                            print('-' * 0x2A)
+                            data = data.decode(session.encoding)
+                        except (UnicodeDecodeError, UnicodeError):
+                            Printer.error("Cant decode session output. Check&change encoding.")
                             self.__restore_prompt()
                         else:
-                            print(data, end='')
-                # else:
-                #     Printer.error(f"Read unknown socket {socket_fd}")
-            for socket_fd in write_sockets:
-                if session := self.get_session(fd=socket_fd):
-                    if next_cmd := session.next_command():
+                            if session.interactive:
+                                print(data, end='')
+                            else:
+                                session.recv_data.append(data)
+
+                elif (event & select.EPOLLHUP) or (event & select.EPOLLRDHUP) or (event & select.EPOLLERR):
+                    if listener := self.get_listener(fd=fd):
                         try:
-                            socket_fd.send(next_cmd.encode(session.encoding))
-                        except (socket.error, OSError) as ex:
-                            Printer.error(f"Cant send data to session {session.rhost}:{session.rport}. {ex}")
-                            self.__restore_prompt()
-                            self.close_session(session)
-                    else:
-                        if socket_fd in self.__write_sockets:
-                            self.__write_sockets.remove(socket_fd)
-                # else:
-                #     Printer.error(f"Write unknown socket {socket_fd}")
-            for socket_fd in error_sockets:
-                # MMMMM?
-                if listener := self.get_listener(fd=socket_fd):
-                    try:
-                        listener.stop()
-                    except ListenerStopError:
-                        pass
-                    Printer.error(f"Listener {listener.lhost}:{listener.lport} error")
-                elif session := self.get_session(fd=socket_fd):
-                    self.close_session(session)
+                            listener.stop()
+                        except ListenerStopError:
+                            pass
+                        self.del_listener_sock(listener.listen_socket)
+                        Printer.error(f"Listener {listener.lhost}:{listener.lport} error")
+                    elif session := self.get_session(fd=fd):
+                        self.close_session(session)
 
         th.join()
 
@@ -212,9 +182,20 @@ class Project94:
                 if command[0] == "exit":
                     self.active_session.interactive = False
                 else:
-                    self.active_session.send_command(" ".join(command))
+                    try:
+                        self.active_session.socket.send((" ".join(command) + "\n").encode(self.active_session.encoding))
+                    except (socket.error, OSError):
+                        Printer.error(f"Cant send data to session {self.active_session.rhost}:{self.active_session.rport}")
+                        self.__restore_prompt()
+                        self.close_session(self.active_session)
+
             elif command[0] in self.commands:
-                self.commands[command[0]](*(command[1:]))
+                cmd = command[0]
+                args = command[1:]
+                try:
+                    self.commands[cmd](*args)
+                except Exception as error:
+                    self.__modules[self.commands[command[0]].module].on_command_error(error, cmd, args)
             else:
                 Printer.error("Unknown command")
 
@@ -230,20 +211,8 @@ class Project94:
                         session.socket.close()
                         return
 
-            if listener.suppress_banners:
-                try:
-                    session.socket.send("pwd\n".encode())
-                except (OSError, socket.error, ssl.SSLError) as ex:
-                    Printer.error(f"{session_addr[0]}:{session_addr[1]} dies from cringe")
-                    Printer.error(str(ex))
-                    return
-                else:
-                    time.sleep(1)
-                    _ = recvall(session.socket)
-
         listener.sockets.append(session.socket)
-        self.__read_sockets.append(session.socket)
-        session.set_callbacks(self.session_read_callback, self.session_write_callback, self.session_error_callback)
+        self.__epoll.register(session.socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
         self.sessions[session.hash] = session
 
         for mod in self.__modules:
@@ -260,16 +229,13 @@ class Project94:
         # Notifying modules about dead session
         for mod in self.__modules:
             mod.on_session_dead(session)
+        self.__epoll.unregister(session.socket.fileno())
         if self.active_session is session:
             self.active_session = None
         if (listener := session.listener) and session.socket in listener.sockets:
             listener.sockets.remove(session.socket)
         if session.hash in self.sessions:
             self.sessions.pop(session.hash)
-        if session.socket in self.__read_sockets:
-            self.__read_sockets.remove(session.socket)
-        if session.socket in self.__write_sockets:
-            self.__write_sockets.remove(session.socket)
         try:
             session.socket.shutdown(socket.SHUT_RDWR)
             session.socket.close()
@@ -279,23 +245,26 @@ class Project94:
             Printer.warning(f"Session {session.rhost}:{session.rport} killed")
 
     def add_listener_sock(self, sock: socket.socket):
-        if sock and sock not in self.__read_sockets:
-            self.__read_sockets.append(sock)
+        self.__epoll.register(sock.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
 
     def del_listener_sock(self, sock: socket.socket):
-        if sock in self.__read_sockets:
-            self.__read_sockets.remove(sock)
+        self.__epoll.unregister(sock.fileno())
 
-    def get_listener(self, *, fd: socket.socket = None, name: str = None) -> Listener | None:
+    def get_listener(self, *, fd: int = None, socket_: socket.socket = None, name: str = None) -> Listener | None:
         """
         Looking for listener in `self.listeners` by criteria:
-        :param fd: search by `listener.listen_socket`
+        :param socket_: search by `listener.listen_socket`
+        :param fd: search by `listener.listen_socket.fileno`
         :param name: search by `listener.name`
         :return: `Listener` or `None`
         """
         if fd:
             for listener in self.listeners:
-                if listener.listen_socket is fd:
+                if listener.listen_socket.fileno() == fd:
+                    return listener
+        if socket_:
+            for listener in self.listeners:
+                if listener.listen_socket is socket_:
                     return listener
         if name:
             for listener in self.listeners:
@@ -303,17 +272,22 @@ class Project94:
                     return listener
         return None
 
-    def get_session(self, *, fd: socket.socket = None, id_: str = None, idx: int = None) -> Session | None:
+    def get_session(self, *, fd: int = None, socket_: socket.socket = None, id_: str = None, idx: int = None) -> Session | None:
         """
         Looking for session in `self.sessions` by criteria:
-        :param fd: search by `session.socket`
+        :param socket_: search by `session.socket`
+        :param fd: search by `session.socket.fileno`.
         :param id_: search by id `session.hash`
         :param idx: search by index in `self.sessions`
         :return: `Session` or `None`
         """
         if fd:
             for h in self.sessions:
-                if self.sessions[h].socket is fd:
+                if self.sessions[h].socket.fileno() == fd:
+                    return self.sessions[h]
+        if socket_:
+            for h in self.sessions:
+                if self.sessions[h].socket is socket_:
                     return self.sessions[h]
         if id_:
             for h in self.sessions:
@@ -354,16 +328,6 @@ class Project94:
             return f"{Printer.context('NO_SESSION')}>> "
 
     # TODO NOTE ABOUT THIS CALLBACKS
-
-    def session_read_callback(self, session: Session):
-        if session.socket in self.__read_sockets:
-            self.__read_sockets.remove(session.socket)
-        else:
-            self.__read_sockets.append(session.socket)
-
-    def session_write_callback(self, session: Session):
-        if session.socket not in self.__write_sockets:
-            self.__write_sockets.append(session.socket)
 
     def session_error_callback(self, session: Session):
         self.close_session(session)
