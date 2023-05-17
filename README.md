@@ -31,7 +31,7 @@ Use one of these methods:
   ### Or keep on master for 'pre-release'
   
   sudo pip3 install .
-  ### or just for run dont do anything xdd
+  ### or just do nothing to run xdd
   ```
 
 **STEP 2** Run  
