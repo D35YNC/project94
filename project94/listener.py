@@ -4,14 +4,6 @@ import socket
 import ssl
 
 
-"""
-LEEEEEGO
-Yeahs its "state" pattern
-Yeahs its overengineering
-XDD
-"""
-
-
 __all__ = ["Listener", "ListenerInitError", "ListenerStartError", "ListenerStopError"]
 
 
