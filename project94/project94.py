@@ -19,7 +19,7 @@ from .utils import get_banner
 from .utils import recvall
 
 
-__version__ = '1.1'
+__version__ = '1.2.dev'
 __all__ = ["Project94", "entry", "__version__"]
 
 
