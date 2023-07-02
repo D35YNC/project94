@@ -1,4 +1,5 @@
 import codecs
+import queue
 import socket
 import ssl
 import time
@@ -7,17 +8,17 @@ from .utils.networking import create_session_hash
 
 
 class Session:
-    def __init__(self, sock: socket.socket, listener):
+    def __init__(self, sock: socket.socket, addr: tuple[str, int], listener):
         self.__socket = sock
         self.__listener = listener
 
-        self.__rhost, self.__rport = sock.getpeername()
+        self.__rhost, self.__rport = addr
         self.__encoding = "utf-8"
-        self.__session_hash = networking.create_session_hash(self.rhost, self.rport)
+        self.__session_hash = create_session_hash(self.rhost, self.rport)
         self.__timestamp = time.time()
 
-        self.recv_data = []
-        self.interactive = False
+        self.recv_data = queue.Queue()
+        self.shell_mode = False
         self.extended_info = {}
 
     @property
