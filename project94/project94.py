@@ -13,10 +13,10 @@ from .listener import ListenerInitError, ListenerStartError, ListenerStopError
 from .modules.module_base import Command
 from .modules.module_base import Module
 from .session import Session
-from .utils import CommandsCompleter
-from .utils import Printer
-from .utils import get_banner
-from .utils import recvall
+from .utils.completer import CommandsCompleter
+from .utils.printer import Printer
+from .utils.banners import get_banner
+from .utils.networking import recvall
 
 
 __version__ = '1.2.dev'

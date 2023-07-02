@@ -3,7 +3,7 @@ import socket
 import ssl
 import time
 
-from .utils import networking
+from .utils.networking import create_session_hash
 
 
 class Session:

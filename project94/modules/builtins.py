@@ -9,7 +9,7 @@ from .module_base import *
 from ..listener import Listener
 from ..listener import ListenerInitError, ListenerStartError, ListenerStopError
 from ..session import Session
-from ..utils.printer import Printer, print_certificate
+from ..utils.printer import Printer, print_listener, print_session
 
 
 class Builtins(Module):
