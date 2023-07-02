@@ -170,10 +170,8 @@ class Listener:
                 return True
         return None
 
-    def start(self) -> socket.socket | None:
-        sock = self.__state.start()
-        self.__socket = sock
-        return self.__socket
+    def start(self):
+        self.__socket = self.__state.start()
 
     def stop(self):
         self.__state.stop()
@@ -238,7 +236,7 @@ class Listener:
     def autorun(self, value):
         self.__autorun = bool(value)
 
-    def save(self) -> dict:
+    def to_dict(self) -> dict:
         return {
             "name": self.name,
             "ip": self.lhost,
@@ -251,7 +249,7 @@ class Listener:
         }
 
     @staticmethod
-    def load(settings):
+    def from_dict(settings: dict):
         listener = Listener(settings.get("name", ""), settings.get("ip", "0.0.0.0"), settings.get("port", 1337))
         listener.setup(settings.get("autorun", False), settings.get("drop_duplicates", True),
                        settings.get("ssl", False))
