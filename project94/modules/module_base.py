@@ -24,10 +24,9 @@ class Command:
         self.__long_description = long_description
 
         self.__subcommands = []
-        self.__args = {}
-        self.__args_required_count = 0
+        self.__required_args = []
+        self.__not_required_args = []
         self.__unlimited_args = False
-        self.__usage = ""
 
         func_info = inspect.getfullargspec(self.__func)
         params = func_info.args or []
@@ -36,18 +35,16 @@ class Command:
             if param == "self":
                 continue
             if len(params) - params.index(param) <= len(defaults):
-                self.__args[param.upper()] = defaults[params.index(param) - len(params)]
+                self.__not_required_args.append(param.upper())
             else:
-                self.__args[param.upper()] = None
+                self.__required_args.append(param.upper())
 
         if func_info.varargs:
-            self.__args[func_info.varargs.upper()] = None
+            self.__required_args.append(func_info.varargs.upper())
             self.__unlimited_args = True
 
         if self.__parent:
             parent.subcommands.append(self)
-
-        self._update_usage_string()
 
     def __get__(self, instance, owner):
         if not self.__module_instance and isinstance(instance, Module):
@@ -55,8 +52,6 @@ class Command:
         return self
 
     def __call__(self, *args):
-        # TODO:
-        #  Unlimited nesting of commands
         if self.has_subcommands and 1 <= len(args):
             for subcmd in self.__subcommands:
                 if args[0] == subcmd.name:
@@ -72,28 +67,9 @@ class Command:
             print("Use:", self.usage)
 
     def subcommand(self, *, name: str = None, description: str = None, long_description: str = None):
-        def wrapper(func):
-            c = Command(self, func, name, description, long_description)
-            self._update_usage_string()
-            return c
+        def wrapper(func) -> Command:
+            return Command(self, func, name, description, long_description)
         return wrapper
-
-    def _update_usage_string(self):
-        self.__usage = ""
-        if self.is_subcommand:
-            self.__usage += f" {self.__parent.name}"
-
-        self.__usage += f" {self.__name}"
-
-        if self.has_subcommands:
-            self.__usage += f" {{{' '.join(subcmd.name for subcmd in self.__subcommands)}}}"
-
-        if self.__args:
-            if required := [arg for arg in self.__args if self.__args[arg] is None]:
-                self.__usage += f" {' '.join(required)}"
-                self.__args_required_count = len(required)
-            if not_required := [arg for arg in self.__args if self.__args[arg] is not None]:
-                self.__usage += f" [{' '.join(not_required)}]"
 
     @property
     def module(self):
@@ -105,7 +81,20 @@ class Command:
 
     @property
     def usage(self):
-        return self.__usage
+        usage_string = ""
+        if self.is_subcommand:
+            usage_string += f" {self.__parent.name}"
+
+        usage_string += f" {self.__name}"
+
+        if self.has_subcommands:
+            usage_string += f" {{{' '.join(subcmd.name for subcmd in self.__subcommands)}}}"
+
+        if required := self.__required_args:
+            usage_string += f" {' '.join(required)}"
+        if not_required := self.__not_required_args:
+            usage_string += f" [{' '.join(not_required)}]"
+        return usage_string
 
     @property
     def description(self):
@@ -125,7 +114,7 @@ class Command:
 
     @property
     def has_subcommands(self):
-        return len(self.__subcommands) > 0
+        return 0 < len(self.__subcommands)
 
     @property
     def subcommands(self):
@@ -133,11 +122,11 @@ class Command:
 
     @property
     def args_count(self):
-        return len(self.__args) if not self.__unlimited_args else -1
+        return len(self.__required_args) + len(self.__not_required_args) if not self.__unlimited_args else -1
 
     @property
     def required_args_count(self):
-        return self.__args_required_count
+        return len(self.__required_args)
 
 
 class Module(abc.ABC):

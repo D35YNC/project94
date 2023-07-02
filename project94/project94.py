@@ -56,13 +56,12 @@ class Project94:
             Printer.info("Loading listeners...")
             for settings in self.config["listeners"]:
                 try:
-                    listener = Listener.load(settings)
+                    listener = Listener.from_dict(settings)
                 except ListenerInitError as ex:
                     Printer.error(str(ex))
                 else:
                     self.listeners.append(listener)
                     Printer.success(f"{listener} loaded")
-            print()
 
     def main(self):
         for mod in self.__modules:
@@ -74,13 +73,12 @@ class Project94:
             for listener in arn:
                 if listener.autorun:
                     try:
-                        sock = listener.start()
+                        listener.start()
                     except ListenerStartError as ex:
                         Printer.error(str(ex))
                     else:
-                        self.add_listener_sock(sock)
+                        self.register_listener(listener)
                         Printer.success(f"{listener} started")
-            print()
 
         th = threading.Thread(target=self.interface, daemon=True)
         th.start()
@@ -106,8 +104,8 @@ class Project94:
                                 Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}")
                                 self.__restore_prompt()
                                 continue
-                        if session := Session(session_socket, listener):
-                            self.register_session(session)
+                        session = Session(session_socket, session_addr, listener)
+                        self.register_session(session)
                         self.__restore_prompt()
                     elif session := self.get_session(fd=fd):
                         data = recvall(session.socket)
@@ -123,10 +121,10 @@ class Project94:
                             Printer.error("Cant decode session output. Check&change encoding.")
                             self.__restore_prompt()
                         else:
-                            if session.interactive:
+                            if session.shell_mode:
                                 print(data, end='')
                             else:
-                                session.recv_data.append(data)
+                                session.recv_data.put_nowait(data)
 
                 elif (event & select.EPOLLHUP) or (event & select.EPOLLRDHUP) or (event & select.EPOLLERR):
                     if listener := self.get_listener(fd=fd):
@@ -134,8 +132,8 @@ class Project94:
                             listener.stop()
                         except ListenerStopError:
                             pass
-                        self.del_listener_sock(listener.listen_socket)
-                        Printer.error(f"Listener {listener.lhost}:{listener.lport} error")
+                        self.unregister_listener(listener)
+                        Printer.error(f"{str(listener)} error")
                     elif session := self.get_session(fd=fd):
                         self.close_session(session)
 
@@ -144,13 +142,8 @@ class Project94:
         if self.__config_path:
             self.config["listeners"] = []
             for listener in self.listeners:
-                self.config["listeners"].append(listener.save())
-                if listener.is_running:
-                    try:
-                        listener.stop()
-                    except ListenerStopError:
-                        pass
-                    Printer.warning(f"Listener {listener} stopped")
+                self.config["listeners"].append(listener.to_dict())
+
             json.dump(self.config, open(self.__config_path, mode='w', encoding="utf-8"))
 
     def interface(self):
@@ -176,16 +169,15 @@ class Project94:
                 continue
 
             command = command.split(' ')
-            if self.active_session and self.active_session.interactive:
+            if self.active_session and self.active_session.shell_mode:
                 if command[0] == "exit":
-                    self.active_session.interactive = False
+                    self.active_session.shell_mode = False
                 else:
                     try:
                         self.active_session.socket.send((" ".join(command) + "\n").encode(self.active_session.encoding))
                     except (socket.error, OSError):
                         self.close_session(self.active_session)
                         self.__restore_prompt()
-
             elif command[0] in self.commands:
                 cmd = command[0]
                 args = command[1:]
@@ -240,15 +232,15 @@ class Project94:
             pass
 
         if its_manual_kill:
-            Printer.warning(f"Session {session.rhost}:{session.rport} killed")
+            Printer.warning(f"{str(session)} killed")
         else:
-            Printer.warning(f"Session {session.rhost}:{session.rport} dead")
+            Printer.warning(f"{str(session)} dead")
 
-    def add_listener_sock(self, sock: socket.socket):
-        self.__epoll.register(sock.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
+    def register_listener(self, listener: Listener):
+        self.__epoll.register(listener.listen_socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
 
-    def del_listener_sock(self, sock: socket.socket):
-        self.__epoll.unregister(sock.fileno())
+    def unregister_listener(self, listener: Listener):
+        self.__epoll.unregister(listener.listen_socket.fileno())
 
     def get_listener(self, *, fd: int = None, socket_: socket.socket = None, name: str = None) -> Listener | None:
         """
@@ -320,12 +312,12 @@ class Project94:
         :return: Current session context `[rhost:rport]`
         """
         if self.active_session:
-            if self.active_session.interactive:
+            if self.active_session.shell_mode:
                 return "\r"
             else:
                 return f"{Printer.context(f'{self.active_session.rhost}:{self.active_session.rport}')}>> "
         else:
-            return f"{Printer.context('NO_SESSION')}>> "
+            return f"{Printer.context('PROJECT94')}>> "
 
     def shutdown(self, *args):
         """Gracefully exit"""
@@ -335,6 +327,15 @@ class Project94:
             self.__modules[mod].on_shutdown()
         while 0 < len(self.sessions):
             self.close_session(self.sessions[list(self.sessions.keys())[0]], its_manual_kill=True)
+        for listener in self.listeners:
+            if listener.is_running:
+                self.unregister_listener(listener)
+                try:
+                    listener.stop()
+                except ListenerStopError:
+                    pass
+                Printer.warning(f"{str(listener)} stopped")
+
 
     def __load_modules(self):
         Printer.info("Loading modules...")
@@ -371,7 +372,6 @@ class Project94:
                 self.commands[cmd] = mod_commands[cmd]
             else:
                 Printer.success(f"{mod.name} loaded")
-        print()
 
     def __restore_prompt(self):
         print(self.context, end='', flush=True)
@@ -384,7 +384,7 @@ def entry():
     parser = argparse.ArgumentParser()
     parser.add_argument("-V", "--version",
                         action='version',
-                        version=f"%(prog)s ver{__version__}")
+                        version=f"%(prog)s v{__version__}")
     parser.add_argument("-c", "--config",
                         type=str,
                         help="load specified config",
