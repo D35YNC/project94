@@ -204,19 +204,37 @@ class Builtins(Module):
         ans = ""
         while ans not in ['y', 'n', 'yes', 'no']:
             ans = input("Enable SSL [y/n] ").lower()
-        #
+        # TODO CHECK TIS FUK
         try:
             listener = Listener(name, ip, port)
         except Exception as ex:
             Printer.error(str(ex))
-        else:
-            if ans.lower().startswith('y'):
-                listener.setup(False, True, True)
-                Printer.info(f"U need initialize certificates. Use \"listener ssl setup {name}\" to do it.")
+            return
+
+        if ans.lower().startswith('y'):
+            listener.setup(False, True, True)
+            ca = input_filename("CA")
+            if ca is None:
+                return
+            cert = input_filename("CERT")
+            if cert is None:
+                return
+            key = input_filename("KEY")
+            if key is None:
+                return
+
+            try:
+                listener.setup_ssl([ca], [(cert, key if key else None)])
+            except Exception as ex:
+                Printer.error(str(ex))
+                # TODO Message about ssl eror and cant create listener
+                return
             else:
-                listener.setup(False, True)
-            Printer.info(f"{listener} created")
-            self.app.listeners.append(listener)
+                Printer.success("SSL enabled")
+        else:
+            listener.setup(False, True)
+        Printer.info(f"{listener} created")
+        self.app.listeners.append(listener)
 
     @listener.subcommand(name="start", description="starting specified listener")
     def listener_start(self, name: str):
@@ -272,8 +290,8 @@ class Builtins(Module):
             time.sleep(0.5)
             try:
                 listener.stop()
-            except ListenerStopError as ex:
-                pass  # Printer.error(str(ex))
+            except ListenerStopError:
+                pass
             self.app.listeners.remove(listener)
             Printer.success(f"{str(listener)} Delete: OK")
         else:
@@ -287,42 +305,24 @@ class Builtins(Module):
             return
 
         match action.lower():
-            case "setup":
-                ca = get_filename_input("CA [ENTER FOR SKIP]")
-                if ca is None:
-                    return
-                cert = get_filename_input("CERT [ENTER FOR SKIP]")
-                if cert is None:
-                    return
-                key = get_filename_input("KEY [ENTER FOR SKIP]")
-                if key is None:
-                    return
-
-                try:
-                    listener.setup_ssl([ca], [(cert, key if key else None)])
-                except ListenerInitError as error:
-                    Printer.error(str(error))
-                else:
-                    Printer.success("Ok")
             case "ca":
-                ca = get_filename_input("CA")
+                ca = input_filename("CA")
                 if ca is None:
                     return
-                if ca:
-                    if listener.load_ca(ca):
-                        Printer.info("CA loaded")
-            case "cert" | "key":
-                cert = get_filename_input("CERT")
+                if listener.load_ca(ca):
+                    Printer.info("CA loaded")
+            case "cert":
+                cert = input_filename("CERT")
                 if cert is None:
                     return
-                key = get_filename_input("KEY")
+                key = input_filename("KEY")
                 if key is None:
                     return
 
                 if listener.load_cert(cert, key or None):
-                    Printer.info(f"CERT {cert}{f' and KEY {key} ' if key is not None else ' '}loaded")
+                    Printer.info(f"CERT {cert}{f' and KEY {key} ' if key != '' else ' '}loaded")
             case _:
-                Printer.error("Bad action specified, need: [all, setup, ca, cert, key]")
+                Printer.error("Bad action specified, need: [ca, cert]")
 
     @listener.subcommand(name="enable", description="enables listener autorun")
     def listener_enable_autorun(self, name):

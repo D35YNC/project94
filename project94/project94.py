@@ -233,10 +233,13 @@ class Project94:
             Printer.warning(f"{str(session)} dead")
 
     def register_listener(self, listener: Listener):
-        self.__epoll.register(listener.listen_socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
+        # TODO: Error handling?
+        if listener.listen_socket:
+            self.__epoll.register(listener.listen_socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
 
     def unregister_listener(self, listener: Listener):
-        self.__epoll.unregister(listener.listen_socket.fileno())
+        if listener.listen_socket:
+            self.__epoll.unregister(listener.listen_socket.fileno())
 
     def get_listener(self, *, fd: int = None, socket_: socket.socket = None, name: str = None) -> Listener | None:
         """
@@ -331,7 +334,6 @@ class Project94:
                 except ListenerStopError:
                     pass
                 Printer.warning(f"{str(listener)} stopped")
-
 
     def __load_modules(self):
         Printer.info("Loading modules...")
