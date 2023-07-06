@@ -96,10 +96,6 @@ class Project94:
                         if listener.ssl_enabled:
                             try:
                                 session_socket = listener.ssl_context.wrap_socket(session_socket, True)
-                            except ssl.SSLCertVerificationError:
-                                Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. Bad certificate")
-                                self.__restore_prompt()
-                                continue
                             except ssl.SSLError as ex:
                                 Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}")
                                 self.__restore_prompt()
