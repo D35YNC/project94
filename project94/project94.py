@@ -9,7 +9,7 @@ import ssl
 import threading
 
 from .listener import Listener
-from .listener import ListenerInitError, ListenerStartError, ListenerStopError
+from .listener import ListenerStartError, ListenerStopError
 from .modules.module_base import Command
 from .modules.module_base import Module
 from .session import Session
@@ -57,7 +57,7 @@ class Project94:
             for settings in self.config["listeners"]:
                 try:
                     listener = Listener.from_dict(settings)
-                except ListenerInitError as ex:
+                except Exception as ex:
                     Printer.error(str(ex))
                 else:
                     self.listeners.append(listener)

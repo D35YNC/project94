@@ -5,9 +5,9 @@ import datetime
 
 from .module_base import *
 from ..listener import Listener
-from ..listener import ListenerInitError, ListenerStartError, ListenerStopError
+from ..listener import ListenerStartError, ListenerStopError
 from ..session import Session
-from ..utils.printer import Printer, print_listener, print_session
+from ..utils.printer import Printer, print_listener, print_session, input_filename
 
 
 class Builtins(Module):
@@ -207,7 +207,7 @@ class Builtins(Module):
         #
         try:
             listener = Listener(name, ip, port)
-        except ListenerInitError as ex:
+        except Exception as ex:
             Printer.error(str(ex))
         else:
             if ans.lower().startswith('y'):

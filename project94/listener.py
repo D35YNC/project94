@@ -4,7 +4,7 @@ import socket
 import ssl
 
 
-__all__ = ["Listener", "ListenerInitError", "ListenerStartError", "ListenerStopError"]
+__all__ = ["Listener", "ListenerStartError", "ListenerStopError"]
 
 
 class ListenerStateEnum(enum.Enum):
@@ -82,11 +82,11 @@ class Unknown(ListenerState):
 class Listener:
     def __init__(self, name: str, ip: str, port: int):
         if name.strip() == "" or ' ' in name:
-            raise ListenerInitError("Incorrect name")
+            raise ValueError(f"Listener name '{name}' is incorrect")
         if not isinstance(port, int):
-            raise ListenerInitError("Port is not int")
+            raise ValueError("Port is not int")
         elif not (0 < port < 0xFFFF):
-            raise ListenerInitError("Port is not in range 0-65535")
+            raise ValueError("Port is not in range 0-65535")
 
         self.__name = name
         self.__lhost = ip
@@ -122,9 +122,9 @@ class Listener:
         if self.__state is not self.__states[ListenerStateEnum.Unknown]:
             return
         if ca is not None and not isinstance(ca, list):
-            raise ListenerInitError("list of ca certs is not list")
+            raise ValueError("list of ca certs is not list")
         if cert is not None and not isinstance(cert, list):
-            raise ListenerInitError("list of certs is not list")
+            raise ValueError("list of certs is not list")
 
         self.__state = self.__states[ListenerStateEnum.Stopped]
 
@@ -132,15 +132,16 @@ class Listener:
         self.__ssl_context.verify_mode = ssl.VerifyMode.CERT_REQUIRED
         self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
 
+        # TODO: Change exception type here
         if ca:
             for cafile in ca:
                 if not self.load_ca(cafile):
-                    raise ListenerInitError(f"Cant load ca cert {cafile}")
+                    raise RuntimeError(f"Cant load ca cert {cafile}")
         if cert:
             for certfile in cert:
                 if len(certfile) == 2:
                     if not self.load_cert(*certfile):
-                        raise ListenerInitError(f"Cant load cert {certfile}")
+                        raise RuntimeError(f"Cant load cert {certfile}")
 
     def load_ca(self, cafile) -> bool | None:
         if self.ssl_enabled:
@@ -259,10 +260,6 @@ class Listener:
 
     def __str__(self):
         return f"{self.name} <{self.lhost}:{self.lport}>"
-
-
-class ListenerInitError(Exception):
-    pass
 
 
 class ListenerStartError(Exception):
