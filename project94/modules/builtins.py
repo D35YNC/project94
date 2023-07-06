@@ -281,18 +281,6 @@ class Builtins(Module):
 
     @listener.subcommand(name="ssl", description="managing listener ssl certificates")
     def listener_ssl(self, name, action):
-        def get_filename_input(prompt):
-            value = ""
-            while not os.path.isfile(value):
-                value = input(f"{prompt}: ")
-                if value.strip() == '':
-                    return ''
-                elif value == "exit":
-                    return None
-            else:
-                value = os.path.normpath(os.path.join(os.getcwd(), os.path.expanduser(value)))
-                return value
-
         listener = self.app.get_listener(name=name)
         if not listener:
             Printer.warning(f"Listener \"{name}\" not found")

@@ -1,4 +1,18 @@
 import datetime
+import os
+
+
+def input_filename(prompt):
+    value = ""
+    while not os.path.isfile(value):
+        value = input(f"{prompt}: ")
+        if value.strip() == '':
+            return ''
+        elif value == "exit":
+            return None
+    else:
+        value = os.path.normpath(os.path.join(os.getcwd(), os.path.expanduser(value)))
+        return value
 
 
 def print_certificate(cert):
