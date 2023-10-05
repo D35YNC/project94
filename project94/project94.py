@@ -27,8 +27,8 @@ class Project94:
     def __init__(self, args):
         self.EXIT = threading.Event()
 
-        signal.signal(signal.SIGINT, self.shutdown)
-        signal.signal(signal.SIGTERM, self.shutdown)
+        signal.signal(signal.SIGINT, self.no_shutdown)
+        signal.signal(signal.SIGTERM, self.no_shutdown)
 
         self.commands: dict[str, Command] = {}
         self.__modules: dict[str, Module] = {}
@@ -151,8 +151,9 @@ class Project94:
         completer = CommandsCompleter(self.commands)
         readline.set_completer_delims("\t")
         readline.set_completer(completer.complete)
-        readline.parse_and_bind('tab: complete')
         readline.set_completion_display_matches_hook(completer.display_matches)
+        readline.parse_and_bind("tab: complete")
+
         while not self.EXIT.is_set():
             try:
                 command = input(self.context)
@@ -160,11 +161,7 @@ class Project94:
                 self.shutdown()
                 break
 
-            command = command.strip()
-            if not command:
-                continue
-
-            command = command.split(' ')
+            command = command.strip().split(' ')
             if self.active_session and self.active_session.shell_mode:
                 if command[0] == "exit":
                     self.active_session.shell_mode = False
@@ -174,15 +171,18 @@ class Project94:
                     except (socket.error, OSError):
                         self.close_session(self.active_session)
                         self.__restore_prompt()
-            elif command[0] in self.commands:
+            elif command[0] and command[0] in self.commands:
                 cmd = command[0]
                 args = command[1:]
                 try:
                     self.commands[cmd](*args)
                 except Exception as error:
-                    self.commands[cmd].module.on_command_error(error, cmd, args)
+                    Printer.error(f"{cmd}; ERR:{error}; ARGS:{args}")
+                    # self.commands[cmd].module.on_command_error(error, cmd, args)
+            elif command[0].strip() == '':
+                pass
             else:
-                Printer.error("Unknown command")
+                Printer.error(f"Unknown command")
 
     def register_session(self, session: Session):
         session_addr = session.socket.getpeername()
@@ -191,7 +191,7 @@ class Project94:
             if listener.drop_duplicates:
                 for s in listener.sockets:
                     if s.getpeername()[0] == session_addr[0]:
-                        Printer.warning("Detected the same host connection, dropping...")
+                        Printer.warning(f"Listener {str(listener)} received duplicate connection from {session_addr[0]}, dropping...")
                         session.socket.shutdown(socket.SHUT_RDWR)
                         session.socket.close()
                         return
@@ -263,7 +263,7 @@ class Project94:
                     return listener
         return None
 
-    def get_session(self, *, fd: int = None, socket_: socket.socket = None, id_: str = None, idx: int = None) -> Session | None:
+    def get_session(self, *, fd: int = None, socket_: socket.socket = None, id_: str = None) -> Session | None:
         """
         Looking for session in `self.sessions` by criteria:
         :param socket_: search by `session.socket`
@@ -284,14 +284,6 @@ class Project94:
             for h in self.sessions:
                 if h.startswith(id_):
                     return self.sessions[h]
-        if idx:
-            if not isinstance(idx, int):
-                try:
-                    idx = int(idx)
-                except ValueError:
-                    return None
-            if 0 <= idx < len(self.sessions):
-                return self.sessions.get(list(self.sessions.keys())[idx])
         return None
 
     @property
@@ -312,11 +304,15 @@ class Project94:
         """
         if self.active_session:
             if self.active_session.shell_mode:
-                return "\r"
+                return "\n"
             else:
                 return f"{Printer.context(f'{self.active_session.rhost}:{self.active_session.rport}')}>> "
         else:
             return f"{Printer.context('PROJECT94')}>> "
+
+    def no_shutdown(self, *args):
+        Printer.warning(f"Maaan use exit command to exit pls")
+        self.__restore_prompt()
 
     def shutdown(self, *args):
         """Gracefully exit"""

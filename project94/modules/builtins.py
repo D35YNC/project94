@@ -14,6 +14,9 @@ class Builtins(Module):
     session = Command(name="session", description="sessions management")
     listener = Command(name="listener", description="listeners management")
 
+    listener_enable = Command(listener, name="enable", description="enables some option", long_description="test")
+    listener_disable = Command(listener, name="disable", description="disables some option", long_description="test")
+
     @command(name="bind_shell", description="connects to bind shell")
     def bind_shell(self, ip: str, port: int):
         try:
@@ -28,6 +31,15 @@ class Builtins(Module):
             Printer.error(f"Cant connect to {ip}:{port}")
         else:
             self.app.register_session(Session(sock, (ip, port), None))
+
+    # @command(name="set",
+    #          description="Sets selected variable to target value",
+    #          long_description='fycj toy')
+    # def set(self, var):
+    #     var, value = var.split('=',2)
+    #     if var not in self.app.vars:
+    #         print('fuck')
+    #         return
 
     @command(name="exit",
              description="shutdown project94",
@@ -97,7 +109,7 @@ class Builtins(Module):
     @session.subcommand(name="status", description="shows information about active or specified session")
     def sessions_status(self, session_id: str = ""):
         if session_id:
-            if session := self.app.get_session(id_=session_id, idx=session_id):
+            if session := self.app.get_session(id_=session_id):
                 print_session(session)
             else:
                 Printer.warning(f"Session \"{session_id}\" not found")
@@ -114,11 +126,11 @@ class Builtins(Module):
         else:
             Printer.warning("Current session is FUCKING DEAD")
 
-    @session.subcommand(name="goto", description="switch to another session")
-    def goto(self, session_id: str = ""):
+    @session.subcommand(name="use", description="switch to another session")
+    def use(self, session_id: str = ""):
         if not session_id:
             self.app.active_session = None
-        elif session := self.app.get_session(id_=session_id, idx=session_id):
+        elif session := self.app.get_session(id_=session_id):
             self.app.active_session = session
         else:
             Printer.warning(f"Session \"{session_id}\" not found")
@@ -133,7 +145,7 @@ class Builtins(Module):
                 print(session.recv_data.get_nowait(), end='')
 
         if session_id:
-            if session := self.app.get_session(id_=session_id, idx=session_id):
+            if session := self.app.get_session(id_=session_id):
                 if self.app.active_session is not session:
                     self.app.active_session = session
                 enter_shell(session)
@@ -147,7 +159,7 @@ class Builtins(Module):
     @session.subcommand(name="kill", description="kill active or specified session")
     def session_kill(self, session_id: str = ""):
         if session_id:
-            if session := self.app.get_session(id_=session_id, idx=session_id):
+            if session := self.app.get_session(id_=session_id):
                 self.app.close_session(session, its_manual_kill=True)
             else:
                 Printer.warning(f"Session \"{session_id}\" not found")
@@ -182,7 +194,7 @@ class Builtins(Module):
 
     @listener.subcommand(name="create", description="initializing new listener")
     def listener_create(self):
-        print("Interactive listener creation [type exit to exit]")
+        print("Interactive listener creation [type exit to interrupt]")
         name = input("Name: ")
         if name == "exit":
             return
@@ -324,7 +336,18 @@ class Builtins(Module):
             case _:
                 Printer.error("Bad action specified, need: [ca, cert]")
 
-    @listener.subcommand(name="enable", description="enables listener autorun")
+    # @listener.subcommand(name="enable", description="enables listener autorun")
+    # def listener_enable_autorun(self, name):
+    #     if listener := self.app.get_listener(name=name):
+    #         if listener.autorun:
+    #             Printer.warning(f"Listener \"{listener.name}\" autorun is already enabled")
+    #         else:
+    #             listener.autorun = True
+    #             Printer.success(f"Listener \"{listener.name}\" autorun enabled")
+    #     else:
+    #         Printer.warning(f"Listener \"{name}\" not found")
+
+    @listener_enable.subcommand(name="autorun", description="enables listener autorun")
     def listener_enable_autorun(self, name):
         if listener := self.app.get_listener(name=name):
             if listener.autorun:
@@ -335,7 +358,7 @@ class Builtins(Module):
         else:
             Printer.warning(f"Listener \"{name}\" not found")
 
-    @listener.subcommand(name="disable", description="disables listener autorun")
+    @listener_disable.subcommand(name="autorun", description="disables listener autorun")
     def listener_disable_autorun(self, name):
         if listener := self.app.get_listener(name=name):
             if not listener.autorun:
@@ -343,6 +366,28 @@ class Builtins(Module):
             else:
                 listener.autorun = False
                 Printer.success(f"Listener \"{listener.name}\" autorun disabled")
+        else:
+            Printer.warning(f"Listener \"{name}\" not found")
+
+    @listener_enable.subcommand(name="drop", description="enables listener drop duplicates")
+    def listener_enable_duplicates_drop(self, name):
+        if listener := self.app.get_listener(name=name):
+            if listener.drop_duplicates:
+                Printer.warning(f"Listener \"{listener.name}\" droppin dups is already enabled")
+            else:
+                listener.drop_duplicates = True
+                Printer.success(f"Listener \"{listener.name}\" droppin dups enabled")
+        else:
+            Printer.warning(f"Listener \"{name}\" not found")
+
+    @listener_disable.subcommand(name="drop", description="disables listener drop duplicates")
+    def listener_disable_duplicates_drop(self, name):
+        if listener := self.app.get_listener(name=name):
+            if not listener.drop_duplicates:
+                Printer.warning(f"Listener \"{listener.name}\" droppin dups is already disabled")
+            else:
+                listener.drop_duplicates = False
+                Printer.success(f"Listener \"{listener.name}\" droppin dups disabled")
         else:
             Printer.warning(f"Listener \"{name}\" not found")
 
@@ -356,8 +401,8 @@ class Builtins(Module):
         else:
             Printer.warning(f"Listener \"{name}\" not found")
 
-    def on_command_error(self, *args, **kwargs):
-        error = args[0]
-        cmd = args[1]
-        arg = args[2]
-        Printer.error(f"comanderor hok {error}, {cmd}, {arg}")
+    # def on_command_error(self, *args, **kwargs):
+    #     error = args[0]
+    #     cmd = args[1]
+    #     arg = args[2]
+    #     Printer.error(f"on_command_error hook: ERR:{error} CMD:{cmd} ARGS:{arg}")
