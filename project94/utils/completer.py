@@ -48,11 +48,11 @@ class CommandsCompleter:
     def __make_options(commands: dict[str, Command]) -> dict[str, dict]:
         res = {}
         for command_name in commands:
-            if commands[command_name].subcommands:
+            if commands[command_name] and commands[command_name].subcommands:
                 res[command_name] = {}
                 for subcommand in commands[command_name].subcommands:
-                    res[command_name][subcommand.name] = {}
-                    res[command_name].update(CommandsCompleter.__make_options({subcommand.name: subcommand}))
+                    res[command_name][subcommand] = {}
+                    res[command_name].update(CommandsCompleter.__make_options({subcommand: None}))
             else:
                 res[command_name] = None
         return res
