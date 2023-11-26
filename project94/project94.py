@@ -7,20 +7,17 @@ import socket
 import ssl
 import threading
 
-from .listener import Listener, ListenerStartError, ListenerStopError
-from .session import Session
+from project94.listener import Listener, ListenerStartError, ListenerStopError
+from project94.session import Session
 
-from .modules.module_base import Command
-from .modules.module_base import Module
+from project94.commands import Command
 
-from .utils.banners import get_banner
-from .utils.completer import CommandsCompleter
-from .utils.networking import recvall
-from .utils.printer import Printer
+from project94.utils.completer import CommandsCompleter
+from project94.utils.networking import recvall
+from project94.utils.printer import Printer
 
 
 __version__ = '1.2.dev'
-__all__ = ["Project94", "entry", "__version__"]
 
 
 class Project94:

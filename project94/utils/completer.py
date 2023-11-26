@@ -1,6 +1,6 @@
 import readline
 
-from ..modules.module_base import Command
+from project94.commands import Command
 
 
 class CommandsCompleter:

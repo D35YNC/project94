@@ -4,7 +4,7 @@ import socket
 import ssl
 import time
 
-from .utils.networking import create_session_hash
+from project94.utils.networking import create_session_hash
 
 
 class Session:
