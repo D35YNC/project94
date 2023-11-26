@@ -61,9 +61,6 @@ class Project94:
                     Printer.success(f"{listener} loaded")
 
     def main(self):
-        for mod in self.__modules:
-            self.__modules[mod].on_ready()
-
         arn = [listener for listener in self.listeners if listener.autorun]
         if 0 < len(arn):
             Printer.info("Autorun listeners...")
@@ -192,9 +189,6 @@ class Project94:
         self.__epoll.register(session.socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
         self.sessions[session.hash] = session
 
-        for mod in self.__modules:
-            self.__modules[mod].on_session_ready(session)
-
         Printer.info(f"New session: {session}")
 
     def close_session(self, session: Session, *, its_manual_kill: bool = False):
@@ -203,9 +197,6 @@ class Project94:
         :param session: `Session` to close
         :param its_manual_kill: Write a message that the session was interrupted manually or died by them
         """
-        # Notifying modules about dead session
-        for mod in self.__modules:
-            self.__modules[mod].on_session_dead(session)
         self.__epoll.unregister(session.socket.fileno())
         if self.active_session is session:
             self.active_session = None
@@ -309,8 +300,6 @@ class Project94:
         """Gracefully exit"""
         Printer.warning("Exit...")
         self.EXIT.set()
-        for mod in self.__modules:
-            self.__modules[mod].on_shutdown()
         while 0 < len(self.sessions):
             self.close_session(self.sessions[list(self.sessions.keys())[0]], its_manual_kill=True)
         for listener in self.listeners:
