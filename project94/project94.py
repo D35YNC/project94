@@ -6,6 +6,7 @@ import signal
 import socket
 import ssl
 import threading
+import importlib
 
 from project94.listener import Listener, ListenerStartError, ListenerStopError
 from project94.session import Session
@@ -28,8 +29,7 @@ class Project94:
         signal.signal(signal.SIGTERM, self.no_shutdown)
 
         self.commands: dict[str, Command] = {}
-        self.__modules: dict[str, Module] = {}
-        self.__load_modules()
+        self.__load_commands()
 
         self.listeners: list[Listener] = []
         self.sessions: dict[str, Session] = {}
@@ -322,32 +322,29 @@ class Project94:
                     pass
                 Printer.warning(f"{str(listener)} stopped")
 
-    def __load_modules(self):
-        Printer.info("Loading modules...")
-        for cls in Module.__subclasses__():
+    def __load_commands(self):
+        for f in os.listdir(os.path.join(os.path.dirname(__file__), "commands")):
+            if f.endswith(".py"):
+                mod = os.path.basename(f)[:-3]
+                if mod != "__init__":
+                    try:
+                        importlib.import_module(f"project94.commands.{mod}")
+                    except Exception as ex:
+                        Printer.error(f"Error while importing {mod}: {ex}")
+
+        for cls in Command.__subclasses__():
             try:
-                mod = cls(self)
+                cmd = cls(self)
             except Exception as ex:
-                Printer.error(f"Cant load module {cls.__name__}. {ex}")
+                Printer.error(f"Cant load {cls.__name__}. {ex}")
                 continue
 
-            if mod.name in self.__modules:
-                Printer.error(f"Module {mod.name} from {mod.__module__} already imported from "
-                              f"{self.__modules[mod.name].__module__}")
+            if cmd.name in self.commands:
+                Printer.error(f"Module {cmd.name} from {cmd.__module__} already imported from "
+                              f"{self.commands[cmd.name].__module__}")
                 continue
 
-            self.__modules[mod.name] = mod
-            mod_commands = mod.get_commands()
-            for cmd in mod_commands:
-                if mod_commands[cmd].is_subcommand:
-                    continue
-                if cmd in self.commands:
-                    Printer.error(f"Command {cmd} from \"{mod.name}\" ({mod.__module__}) already imported from "
-                                  f"\"{self.commands[cmd].module.name}\" ({self.commands[cmd].module.__module__})")
-                    continue
-                self.commands[cmd] = mod_commands[cmd]
-            else:
-                Printer.success(f"{mod.name} loaded")
+            self.commands[cmd.name] = cmd
 
     def __restore_prompt(self):
         print(self.context, end='', flush=True)
