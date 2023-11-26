@@ -1,7 +1,14 @@
+import datetime
+
 from project94.commands import Command
 
 from project94.utils.printer import Printer
 from project94.utils.printer import print_session
+
+try:
+    from prettytable import PrettyTable
+except ImportError:
+    PrettyTable = None
 
 
 class SessionCmd(Command):
@@ -55,6 +62,15 @@ class SessionCmd(Command):
     def list(self, args):
         if len(self.app.sessions) == 0:
             Printer.warning("No online sessions")
+        elif args.table:
+            if PrettyTable:
+                t = PrettyTable(["Hash", "Target", "Time", "SSL", "Encoding"])
+                for id_ in self.app.sessions:
+                    session = self.app.sessions[id_]
+                    t.add_row([session.hash[:32], f"{session.rhost}:{session.rport}",
+                               datetime.datetime.fromtimestamp(session.timestamp).strftime('%m.%d %H:%M:%S'),
+                               session.ssl_enabled, session.encoding])
+                print(t)
         else:
             Printer.info("Listing online sessions...")
             Printer.info(f"{len(self.app.sessions)} sessions online")

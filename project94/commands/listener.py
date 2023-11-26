@@ -10,6 +10,11 @@ from project94.utils.printer import Printer
 from project94.utils.printer import print_listener
 from project94.utils.printer import print_session
 
+try:
+    from prettytable import PrettyTable
+except ImportError:
+    PrettyTable = None
+
 
 class ListenerCmd(Command):
     def __init__(self, app):
@@ -136,6 +141,16 @@ class ListenerCmd(Command):
     def list(self, args):
         if len(self.app.listeners) == 0:
             Printer.warning("No available listeners")
+        elif args.table:
+            if PrettyTable:
+                t = PrettyTable(["State", "Name", "Address", "SSL", "#Sessions", "Autorun", "Drop duplicates"])
+                for listener in self.app.listeners:
+                    t.add_row(
+                        [listener.state, listener.name, f"{listener.lhost}:{listener.lport}", listener.ssl_enabled,
+                         len(listener.sockets), listener.autorun, listener.drop_duplicates])
+                print(t)
+            else:
+                Printer.warning("prettytable not installed")
         else:
             Printer.info("Listing all listeners...")
             for listener in self.app.listeners:
