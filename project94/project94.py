@@ -1,3 +1,4 @@
+import argparse
 import json
 import os
 import readline
@@ -25,8 +26,7 @@ class Project94:
     def __init__(self, args):
         self.EXIT = threading.Event()
 
-        signal.signal(signal.SIGINT, self.no_shutdown)
-        signal.signal(signal.SIGTERM, self.no_shutdown)
+        signal.signal(signal.SIGINT, self.sigint_lock)
 
         self.commands: dict[str, Command] = {}
         self.__load_commands()
@@ -160,11 +160,15 @@ class Project94:
                     except (socket.error, OSError):
                         self.close_session(self.active_session)
                         self.__restore_prompt()
-            elif command[0] and command[0] in self.commands:
+            elif command[0] in self.commands:
                 cmd = command[0]
                 args = command[1:]
                 try:
-                    self.commands[cmd](*args)
+                    self.commands[cmd](args)
+                except SystemExit:
+                    pass
+                except argparse.ArgumentError:
+                    print(self.commands[cmd].usage)
                 except Exception as error:
                     Printer.error(f"{cmd}; ERR:{error}; ARGS:{args}")
                     # self.modules[cmd].module.on_command_error(error, cmd, args)
@@ -184,8 +188,7 @@ class Project94:
                         session.socket.shutdown(socket.SHUT_RDWR)
                         session.socket.close()
                         return
-
-        listener.sockets.append(session.socket)
+            listener.sockets.append(session.socket)
         self.__epoll.register(session.socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
         self.sessions[session.hash] = session
 
@@ -224,25 +227,25 @@ class Project94:
         if listener.listen_socket:
             self.__epoll.unregister(listener.listen_socket.fileno())
 
-    def get_listener(self, *, fd: int = None, socket_: socket.socket = None, name: str = None) -> Listener | None:
+    def get_listener(self, *, fd: int = None, socket_: socket.socket = None, listener_id: str = None) -> Listener | None:
         """
         Looking for listener in `self.listeners` by criteria:
         :param fd: search by `listener.listen_socket.fileno`
         :param socket_: search by `listener.listen_socket`
-        :param name: search by `listener.name`
+        :param listener_id: search by `listener.name`
         :return: `Listener` or `None`
         """
         if fd:
             for listener in self.listeners:
-                if listener.listen_socket.fileno() == fd:
+                if listener.is_running and listener.listen_socket.fileno() == fd:
                     return listener
         if socket_:
             for listener in self.listeners:
                 if listener.listen_socket is socket_:
                     return listener
-        if name:
+        if listener_id:
             for listener in self.listeners:
-                if listener.name == name:
+                if listener.name == listener_id:
                     return listener
         return None
 
@@ -292,9 +295,6 @@ class Project94:
         else:
             return f"{Printer.context('PROJECT94')}>> "
 
-    def no_shutdown(self, *args):
-        Printer.warning(f"Maaan use exit command to exit pls")
-        self.__restore_prompt()
 
     def shutdown(self, *args):
         """Gracefully exit"""
@@ -310,6 +310,9 @@ class Project94:
                 except ListenerStopError:
                     pass
                 Printer.warning(f"{str(listener)} stopped")
+
+    def sigint_lock(self, *args):
+        pass
 
     def __load_commands(self):
         for f in os.listdir(os.path.join(os.path.dirname(__file__), "commands")):
@@ -339,41 +342,3 @@ class Project94:
         print(self.context, end='', flush=True)
         print(readline.get_line_buffer(), end='', flush=True)
 
-
-def entry():
-    import argparse
-
-    parser = argparse.ArgumentParser()
-    parser.add_argument("-V", "--version",
-                        action='version',
-                        version=f"%(prog)s v{__version__}")
-    parser.add_argument("-c", "--config",
-                        type=str,
-                        help="load specified config",
-                        default="94.conf")
-    parser.add_argument("-l", "--listeners",
-                        type=str,
-                        help="load listeners from string",
-                        default=None)
-    parser.add_argument("--disable-config",
-                        action="store_true",
-                        help="disable config save-load",
-                        default=False)
-    parser.add_argument("--disable-colors",
-                        action="store_true",
-                        help="disable colored output",
-                        default=False)
-
-    a = parser.parse_args()
-
-    if a.listeners:
-        a.disable_config = True
-
-    print(f"\n{get_banner()}")
-
-    app = Project94(a)
-    app.main()
-
-
-if __name__ == '__main__':
-    entry()
