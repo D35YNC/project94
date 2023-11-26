@@ -98,7 +98,6 @@ class Listener:
                          ListenerStateEnum.Unknown: Unknown(self, ListenerStateEnum.Unknown)}
         self.__state = self.__states[ListenerStateEnum.Unknown]
         self.__ssl_context: ssl.SSLContext = None
-
         self.__socket: socket.socket = None
         self.__accepted_sockets = []
 

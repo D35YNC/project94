@@ -1,4 +1,3 @@
-import importlib
 import json
 import os
 import readline
@@ -8,15 +7,16 @@ import socket
 import ssl
 import threading
 
-from .listener import Listener
-from .listener import ListenerStartError, ListenerStopError
+from .listener import Listener, ListenerStartError, ListenerStopError
+from .session import Session
+
 from .modules.module_base import Command
 from .modules.module_base import Module
-from .session import Session
-from .utils.completer import CommandsCompleter
-from .utils.printer import Printer
+
 from .utils.banners import get_banner
+from .utils.completer import CommandsCompleter
 from .utils.networking import recvall
+from .utils.printer import Printer
 
 
 __version__ = '1.2.dev'
@@ -34,9 +34,9 @@ class Project94:
         self.__modules: dict[str, Module] = {}
         self.__load_modules()
 
-        self.__active_session: Session = None
         self.listeners: list[Listener] = []
         self.sessions: dict[str, Session] = {}
+        self.__active_session: Session = None
         self.__epoll = select.epoll()
 
         Printer.colored = not args.disable_colors
@@ -143,11 +143,6 @@ class Project94:
             json.dump(self.config, open(self.__config_path, mode='w', encoding="utf-8"))
 
     def interface(self):
-        # TODO
-        #  [-] 1/DISABLING AUTOCOMPLETION IN INTERACTIVE MODE
-        #    Logic changed <it will not be fixed yet>
-        #  [-] 2/FIX <ENTER> PRESSING WHEN EXITING WITH NON EMPTY INPUT
-        #    ? <it will not be fixed yet>
         completer = CommandsCompleter(self.commands)
         readline.set_completer_delims("\t")
         readline.set_completer(completer.complete)
@@ -203,7 +198,7 @@ class Project94:
         for mod in self.__modules:
             self.__modules[mod].on_session_ready(session)
 
-        Printer.info(f"New session: {session_addr[0]}:{session_addr[1]}")
+        Printer.info(f"New session: {session}")
 
     def close_session(self, session: Session, *, its_manual_kill: bool = False):
         """
@@ -244,8 +239,8 @@ class Project94:
     def get_listener(self, *, fd: int = None, socket_: socket.socket = None, name: str = None) -> Listener | None:
         """
         Looking for listener in `self.listeners` by criteria:
-        :param socket_: search by `listener.listen_socket`
         :param fd: search by `listener.listen_socket.fileno`
+        :param socket_: search by `listener.listen_socket`
         :param name: search by `listener.name`
         :return: `Listener` or `None`
         """
@@ -266,10 +261,9 @@ class Project94:
     def get_session(self, *, fd: int = None, socket_: socket.socket = None, id_: str = None) -> Session | None:
         """
         Looking for session in `self.sessions` by criteria:
-        :param socket_: search by `session.socket`
         :param fd: search by `session.socket.fileno`.
+        :param socket_: search by `session.socket`
         :param id_: search by id `session.hash`
-        :param idx: search by index in `self.sessions`
         :return: `Session` or `None`
         """
         if fd:
