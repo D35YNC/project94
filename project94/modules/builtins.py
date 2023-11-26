@@ -1,11 +1,9 @@
-import os.path
 import socket
 import time
 import datetime
 
 from .module_base import *
-from ..listener import Listener
-from ..listener import ListenerStartError, ListenerStopError
+from ..listener import Listener, ListenerStartError, ListenerStopError
 from ..session import Session
 from ..utils.printer import Printer, print_listener, print_session, input_filename
 

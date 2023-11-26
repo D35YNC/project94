@@ -173,7 +173,7 @@ class Project94:
                     self.commands[cmd](*args)
                 except Exception as error:
                     Printer.error(f"{cmd}; ERR:{error}; ARGS:{args}")
-                    # self.commands[cmd].module.on_command_error(error, cmd, args)
+                    # self.modules[cmd].module.on_command_error(error, cmd, args)
             elif command[0].strip() == '':
                 pass
             else:
@@ -327,15 +327,6 @@ class Project94:
 
     def __load_modules(self):
         Printer.info("Loading modules...")
-        for f in os.listdir(os.path.join(os.path.dirname(__file__), "modules")):
-            if f.endswith(".py"):
-                mod = os.path.basename(f)[:-3]
-                if mod not in ["module_base", "__init__"]:
-                    try:
-                        importlib.import_module(f"project94.modules.{mod}")
-                    except Exception as ex:
-                        Printer.error(f"Error while importing {mod}: {ex}")
-
         for cls in Module.__subclasses__():
             try:
                 mod = cls(self)
