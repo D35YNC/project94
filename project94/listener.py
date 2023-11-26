@@ -114,30 +114,11 @@ class Listener:
         if not ssl_enabled:
             self.__state = self.__states[ListenerStateEnum.Ready]
 
-    def setup_ssl(self, ca: list = None, cert: list = None):
-        if self.__state is not self.__states[ListenerStateEnum.Unknown]:
-            return
-        if ca is not None and not isinstance(ca, list):
-            raise ValueError("list of ca certs is not list")
-        if cert is not None and not isinstance(cert, list):
-            raise ValueError("list of certs is not list")
-
-        self.__state = self.__states[ListenerStateEnum.Stopped]
-
+    def setup_ssl(self):
         self.__ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         self.__ssl_context.verify_mode = ssl.VerifyMode.CERT_REQUIRED
         self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
 
-        # TODO: Change exception type here
-        if ca:
-            for cafile in ca:
-                if not self.load_ca(cafile):
-                    raise RuntimeError(f"Cant load ca cert {cafile}")
-        if cert:
-            for certfile in cert:
-                if len(certfile) == 2:
-                    if not self.load_cert(*certfile):
-                        raise RuntimeError(f"Cant load cert {certfile}")
 
     def load_ca(self, cafile) -> bool | None:
         if self.ssl_enabled:
@@ -246,12 +227,16 @@ class Listener:
         }
 
     @staticmethod
-    def from_dict(settings: dict):
-        listener = Listener(settings.get("name", ""), settings.get("ip", "0.0.0.0"), settings.get("port", 1337))
-        listener.setup(settings.get("autorun", False), settings.get("drop_duplicates", True),
-                       settings.get("ssl", False))
-        if settings.get("ssl", False):
-            listener.setup_ssl(settings.get("ca", []), settings.get("cert", []))
+    def from_dict(config: dict):
+        listener = Listener(config.get("name", ""), config.get("ip", "0.0.0.0"), config.get("port", 1337))
+        listener.setup(config.get("autorun", False), config.get("drop_duplicates", True),
+                       config.get("ssl", False))
+        if config.get("ssl"):
+            listener.setup_ssl()
+            for ca in config.get("ca", []):
+                listener.load_ca(ca)
+            for cert in config.get("cert", []):
+                listener.load_cert(cert[0], cert[1])
         return listener
 
     def __str__(self):
