@@ -22,7 +22,7 @@ class HelpCmd(Command):
                                           "         ⠀⠀⠀⠀⣿⠀⠀⠸⡆⠹⣶⣀⡏⠀⠀⠀⡏⠉⠿⡿⠿⡿⢿⣏⣏⡏⠀⡇⠀\n"
                                           "         ⠀⠀⠀⠀⢻⠀⠀⠀⠈⠢⣄⡙⠓⠶⠤⢤⣧⣀⣰⣃⣴⡧⠾⠶⠚⠀⡼⠁⠀\n"
                                           "         ⠀⠀⠀⡴⠙⢖⠒⠢⢄⡀⠀⠉⠓⠲⠤⠤⠤⠤⠤⠤⠤⠤⠤⠤⠴⠚⠁⠀⠀\n")
-        self.parser.add_argument("command", type=str, help="command for extended help", nargs='?', default=None)
+        self.add_argument("command", type=str, help="command for extended help", nargs='?', default=None)
 
     def main(self, args):
         command_name = args.command

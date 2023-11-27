@@ -16,36 +16,35 @@ class SessionCmd(Command):
         super().__init__(app, name="session", description="sessions management")
 
         # listener status
-        status_parser = self.add_subcommand("status", "shows information about active or specified session")
-        status_parser.add_argument("session_id", metavar="session", nargs='?', type=str, help="session id", default=None)
-        status_parser.set_defaults(func=self.status)
+        status = self.add_subcommand("status", "shows information about active or specified session", main=self.status)
+        status.add_argument("session_id", metavar="session", nargs='?', type=str, help="session id", default=None)
+        status.add_argument("-V", "--verbose", action="store_true", help="show more information in list mode", default=False)
+
+        # status_parser.set_defaults(func=self.status)
 
         # session list
-        list_parser = self.add_subcommand("list", "shows list of sessions and some information about them")
-        list_parser.add_argument("-T", "--table", action="store_true", help="format output as table")
-        list_parser.set_defaults(func=self.list)
+        list_ = self.add_subcommand("list", "shows list of sessions and some information about them", main=self.list)
+        list_.add_argument("-T", "--table", action="store_true", help="format output as table")
+        # list_parser.set_defaults(func=self.list)
 
         # session encoding
-        encoding_parser = self.add_subcommand("encoding", "changes active session encoding")
-        encoding_parser.add_argument("encoding", type=str, help="new encoding")
-        encoding_parser.set_defaults(func=self.encoding)
+        encoding = self.add_subcommand("encoding", "changes active session encoding", main=self.encoding)
+        encoding.add_argument("encoding", type=str, help="new encoding")
+        # encoding_parser.set_defaults(func=self.encoding)
+
         # session use
-        use_parser = self.add_subcommand("use", "switch context to another session")
-        use_parser.add_argument("session_id", metavar="session", type=str, help="session id")
-        use_parser.set_defaults(func=self.use)
+        use = self.add_subcommand("use", "switch context to another session", main=self.use)
+        use.add_argument("session_id", metavar="session", type=str, help="session id")
+        # use_parser.set_defaults(func=self.use)
 
         # session shell
-        shell_parser = self.add_subcommand("shell", "starts shell of active or specified session")
-        shell_parser.add_argument("session_id", metavar="session", nargs='?', type=str, help="session id", default=None)
-        shell_parser.set_defaults(func=self.shell)
+        shell = self.add_subcommand("shell", "starts shell of active or specified session", main=self.shell)
+        shell.add_argument("session_id", metavar="session", nargs='?', type=str, help="session id", default=None)
+        # shell_parser.set_defaults(func=self.shell)
 
-        kill_parser = self.add_subcommand("kill", "kill active or specified session")
-        kill_parser.add_argument("session_id", metavar="session", nargs='?', type=str, help="session id", default=None)
-        kill_parser.set_defaults(func=self.kill)
-
-    def main(self, args):
-        if hasattr(args, "func"):
-            args.func(args)
+        kill = self.add_subcommand("kill", "kill active or specified session", main=self.kill)
+        kill.add_argument("session_id", metavar="session", nargs='?', type=str, help="session id", default=None)
+        # kill_parser.set_defaults(func=self.kill)
 
     def status(self, args):
         session_id = args.session_id

@@ -21,81 +21,68 @@ class ListenerCmd(Command):
         super().__init__(app, name="listener", description="listeners management")
 
         # listener create
-        create_parser = self.add_subcommand("create", description="initializing new listener")
-        create_parser.add_argument("name", type=str, help="listener name")
-        create_parser.add_argument("lhost", type=str, help="host for binding")
-        create_parser.add_argument("lport", type=int, help="port for binding")
-        create_parser.add_argument("-S", "--enable-ssl", action="store_true", help="enable ssl", default=False)
-        create_parser.add_argument("-D", "--drop-duplicates", action="store_true", help="drop duplicates connections", default=False)
-        create_parser.add_argument("-A", "--autorun", action="store_true", help="run this listener on run project94", default=False)
-        create_parser.add_argument("--ssl-cafile", type=str, help="cafile for ssl")
-        create_parser.add_argument("--ssl-certfile", type=str, help="certfile for ssl")
-        create_parser.add_argument("--ssl-keyfile", type=str, help="keyfile for ssl")
-        create_parser.set_defaults(func=self.create)
+        create = self.add_subcommand("create", description="initializing new listener", main=self.create)
+        create.add_argument("name", type=str, help="listener name")
+        create.add_argument("lhost", type=str, help="host for binding")
+        create.add_argument("lport", type=int, help="port for binding")
+        create.add_argument("-S", "--enable-ssl", action="store_true", help="enable ssl", default=False)
+        create.add_argument("-D", "--drop-duplicates", action="store_true", help="drop duplicates connections", default=False)
+        create.add_argument("-A", "--autorun", action="store_true", help="run this listener on run project94", default=False)
+        create.add_argument("--ssl-cafile", type=str, help="cafile for ssl")
+        create.add_argument("--ssl-certfile", type=str, help="certfile for ssl")
+        create.add_argument("--ssl-keyfile", type=str, help="keyfile for ssl")
 
         # listener status
-        status_parser = self.add_subcommand("status", description="shows status of specified listener")
-        status_parser.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        status_parser.set_defaults(func=self.status)
+        status = self.add_subcommand("status", description="shows status of specified listener", main=self.status)
+        status.add_argument("listener_name", metavar="listener", type=str, help="listener id")
+        status.add_argument("-V", "--verbose", action="store_true", help="show more information in list mode", default=False)
 
         # listener list
-        list_parser = self.add_subcommand("list", description="shows list of listeners and some information about them")
-        list_parser.add_argument("-T", "--table", action="store_true", help="format output as table")
-        list_parser.set_defaults(func=self.list)
+        list_ = self.add_subcommand("list", description="shows list of listeners and some information about them", main=self.list)
+        list_.add_argument("-T", "--table", action="store_true", help="format output as table")
 
         # listener start
-        start_parser = self.add_subcommand("start", description="starting specified listener")
-        start_parser.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        start_parser.set_defaults(func=self.start)
+        start = self.add_subcommand("start", description="starting specified listener", main=self.start)
+        start.add_argument("listener_name", metavar="listener", type=str, help="listener id")
 
         # listener stop
-        stop_parser = self.add_subcommand("stop", description="stops specified listener")
-        stop_parser.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        stop_parser.set_defaults(func=self.stop)
+        stop = self.add_subcommand("stop", description="stops specified listener", main=self.stop)
+        stop.add_argument("listener_name", metavar="listener", type=str, help="listener id")
 
         # listener restart
-        restart_parser = self.add_subcommand("restart", description="restarting specified listener")
-        restart_parser.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        restart_parser.set_defaults(func=self.restart)
+        restart = self.add_subcommand("restart", description="restarting specified listener", main=self.restart)
+        restart.add_argument("listener_name", metavar="listener", type=str, help="listener id")
 
         # listener delete
-        delete_parser = self.add_subcommand("delete", description="deleting specified listener")
-        delete_parser.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        delete_parser.set_defaults(func=self.delete)
+        delete = self.add_subcommand("delete", description="deleting specified listener", main=self.delete)
+        delete.add_argument("listener_name", metavar="listener", type=str, help="listener id")
 
-        # ssl
-        ssl_parser = self.add_subcommand("ssl", description="ssl management")
-        ssl_parser.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        ssl_parser.add_argument("--ssl-cafile", type=str, help="cafile for ssl")
-        ssl_parser.add_argument("--ssl-certfile", type=str, help="certfile for ssl")
-        ssl_parser.add_argument("--ssl-keyfile", type=str, help="keyfile for ssl")
-        ssl_parser.set_defaults(func=self.ssl)
+        # listener ssl
+        ssl_ = self.add_subcommand("ssl", description="ssl management", main=self.ssl)
+        ssl_.add_argument("listener_name", metavar="listener", type=str, help="listener id")
+        ssl_.add_argument("--ssl-cafile", type=str, help="cafile for ssl")
+        ssl_.add_argument("--ssl-certfile", type=str, help="certfile for ssl")
+        ssl_.add_argument("--ssl-keyfile", type=str, help="keyfile for ssl")
 
-        # enable
-        enable_parser = self.add_subcommand("enable", description="enable listener autorun")
-        enable_parser.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        enable_parser.add_argument("--autorun", action="store_true", help="enable autorun", default=False)
-        enable_parser.add_argument("--drop-duplicates", action="store_true", help="enable drop duplicates connections", default=False)
-        enable_parser.set_defaults(func=self.enable)
+        # listener enable
+        enable = self.add_subcommand("enable", description="enable listener autorun", main=self.enable)
+        enable.add_argument("listener_name", metavar="listener", type=str, help="listener id")
+        enable.add_argument("--autorun", action="store_true", help="enable autorun", default=False)
+        enable.add_argument("--drop-duplicates", action="store_true", help="enable drop duplicates connections", default=False)
 
-        # disable
-        disable_parser = self.add_subcommand("disable", description="disable listener autorun")
-        disable_parser.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        disable_parser.add_argument("--autorun", action="store_true", help="disable autorun", default=False)
-        disable_parser.add_argument("--drop-duplicates", action="store_true", help="disable drop duplicates connections", default=False)
-        disable_parser.set_defaults(func=self.disable)
+        # listener disable
+        disable = self.add_subcommand("disable", description="disable listener autorun", main=self.disable)
+        disable.add_argument("listener_name", metavar="listener", type=str, help="listener id")
+        disable.add_argument("--autorun", action="store_true", help="disable autorun", default=False)
+        disable.add_argument("--drop-duplicates", action="store_true", help="disable drop duplicates connections", default=False)
 
-        sessions_parser = self.add_subcommand("sessions", description="shows sessions accepted by listener")
-        sessions_parser.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        sessions_parser.set_defaults(func=self.sessions)
-
-    def main(self, args):
-        if hasattr(args, "func"):
-            args.func(args)
+        # listener sessions
+        sessions = self.add_subcommand("sessions", description="shows sessions accepted by listener", main=self.sessions)
+        sessions.add_argument("listener_name", metavar="listener", type=str, help="listener id")
 
     def create(self, args):
         if args.ssl_keyfile and not args.ssl_certfile:
-            self.parser.error("cant use keyfile without certfile")
+            self.__parser.error("cant use keyfile without certfile")
             return
 
         name = args.name
@@ -223,7 +210,7 @@ class ListenerCmd(Command):
 
     def ssl(self, args):
         if args.ssl_keyfile and not args.ssl_certfile:
-            self.parser.error("cant use keyfile without certfile")
+            self.__parser.error("cant use keyfile without certfile")
             return
 
         listener_id = args.listener_name

@@ -8,8 +8,8 @@ from project94.utils.printer import Printer
 class BindShellCmd(Command):
     def __init__(self, app):
         super().__init__(app, name="bind_shell", description="connects to bind shell")
-        self.parser.add_argument("rhost", type=str, help="remote host for connect")
-        self.parser.add_argument("rport", type=int, help="remote port for connect")
+        self.add_argument("rhost", type=str, help="remote host for connect")
+        self.add_argument("rport", type=int, help="remote port for connect")
 
     def main(self, args):
         rhost = args.rhost
