@@ -3,7 +3,6 @@ import json
 import os
 import readline
 import select
-import signal
 import socket
 import ssl
 import threading
@@ -25,8 +24,6 @@ __version__ = '1.2.dev'
 class Project94:
     def __init__(self, args):
         self.EXIT = threading.Event()
-
-        signal.signal(signal.SIGINT, self.sigint_lock)
 
         self.commands: dict[str, Command] = {}
         self.__load_commands()
@@ -311,9 +308,6 @@ class Project94:
                     pass
                 Printer.warning(f"{str(listener)} stopped")
 
-    def sigint_lock(self, *args):
-        pass
-
     def __load_commands(self):
         for f in os.listdir(os.path.join(os.path.dirname(__file__), "commands")):
             if f.endswith(".py"):
@@ -341,4 +335,3 @@ class Project94:
     def __restore_prompt(self):
         print(self.context, end='', flush=True)
         print(readline.get_line_buffer(), end='', flush=True)
-

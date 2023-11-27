@@ -1,3 +1,5 @@
+import signal
+
 from project94.project94 import Project94, __version__
 from project94.utils.banners import get_banner
 
@@ -32,6 +34,8 @@ def entry():
         a.disable_config = True
 
     print(f"\n{get_banner()}")
+
+    signal.signal(signal.SIGINT, lambda *args: args)
 
     app = Project94(a)
     app.main()
