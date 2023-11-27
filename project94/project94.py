@@ -189,7 +189,7 @@ class Project94:
                         session.socket.close()
                         return
             listener.sockets.append(session.socket)
-        self.__epoll.register(session.socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
+        self.__epoll.register(session.socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
         self.sessions[session.hash] = session
 
         Printer.info(f"New session: {session}")
@@ -220,11 +220,11 @@ class Project94:
 
     def register_listener(self, listener: Listener):
         # TODO: Error handling?
-        if listener.listen_socket:
-            self.__epoll.register(listener.listen_socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR | select.EPOLLET)
+        if listener.is_running:
+            self.__epoll.register(listener.listen_socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
 
     def unregister_listener(self, listener: Listener):
-        if listener.listen_socket:
+        if listener.is_running:
             self.__epoll.unregister(listener.listen_socket.fileno())
 
     def get_listener(self, *, fd: int = None, socket_: socket.socket = None, listener_id: str = None) -> Listener | None:
