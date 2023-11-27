@@ -3,6 +3,8 @@ import enum
 import socket
 import ssl
 
+from project94.utils.logs import create_full_logger
+
 
 class ListenerStateEnum(enum.Enum):
     Unknown = -1,
@@ -88,6 +90,7 @@ class Listener:
         self.__name = name
         self.__lhost = ip
         self.__lport = port
+        self.__logger = create_full_logger(self.__name)
 
         self.__states = {ListenerStateEnum.Ready: Ready(self, ListenerStateEnum.Ready),
                          ListenerStateEnum.Running: Running(self, ListenerStateEnum.Running),
@@ -103,6 +106,7 @@ class Listener:
 
         self.__autorun = False
         self.__drop_duplicates = True
+        self.__logger.info(f"Seems initialized: {self} {self.state}")
 
     def setup(self, autorun: bool, drop_duplicates: bool, ssl_enabled: bool = False):
         if self.__state is not self.__states[ListenerStateEnum.Unknown]:
@@ -114,11 +118,13 @@ class Listener:
         if not ssl_enabled:
             self.__state = self.__states[ListenerStateEnum.Ready]
 
+        self.__logger.info(f"Setup completed: {self.state}")
+
     def setup_ssl(self):
         self.__ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         self.__ssl_context.verify_mode = ssl.VerifyMode.CERT_REQUIRED
         self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
-
+        self.__logger.info(f"SSL context created")
 
     def load_ca(self, cafile) -> bool | None:
         if self.ssl_enabled:
@@ -161,6 +167,14 @@ class Listener:
     def change_state(self, new_state: ListenerStateEnum):
         if new_state in self.__states:
             self.__state = self.__states[new_state]
+
+    @property
+    def log(self) -> list[str]:
+        return self.__logger.handlers[0].stream.getvalue().strip().split('\n')
+
+    @property
+    def logger(self):
+        return self.__logger
 
     @property
     def is_running(self):

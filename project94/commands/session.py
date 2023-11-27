@@ -50,7 +50,7 @@ class SessionCmd(Command):
         session_id = args.session_id
         if session_id:
             if session := self.app.get_session(id_=session_id):
-                print_session(session)
+                print_session(session, args.verbose)
             else:
                 Printer.warning(f"Session \"{session_id}\" not found")
         elif session := self.app.active_session:

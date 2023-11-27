@@ -89,8 +89,11 @@ class Project94:
                             try:
                                 session_socket = listener.ssl_context.wrap_socket(session_socket, True)
                             except ssl.SSLError as ex:
-                                Printer.error(f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}")
-                                self.__restore_prompt()
+                                msg = f"Connection from {session_addr[0]}:{session_addr[1]} dropped. {ex}"
+                                listener.logger.error(msg)
+                                if not self.shell_mode:
+                                    Printer.error(msg)
+                                    self.__restore_prompt()
                                 continue
                         session = Session(session_socket, session_addr, listener)
                         self.register_session(session)
@@ -180,15 +183,21 @@ class Project94:
             if listener.drop_duplicates:
                 for s in listener.sockets:
                     if s.getpeername()[0] == session_addr[0]:
-                        Printer.warning(f"Listener {str(listener)} received duplicate connection from {session_addr[0]}, dropping...")
+                        msg = f"Listener {str(listener)} received duplicate connection from {session_addr[0]}, dropping..."
+                        listener.logger.warning(msg)
+                        if not self.shell_mode:
+                            Printer.warning(msg)
                         session.socket.shutdown(socket.SHUT_RDWR)
                         session.socket.close()
                         return
             listener.sockets.append(session.socket)
         self.__epoll.register(session.socket.fileno(), select.EPOLLIN | select.EPOLLHUP | select.EPOLLERR)
         self.sessions[session.hash] = session
-
-        Printer.info(f"New session: {session}")
+        msg = f"New session: {session}"
+        if not self.shell_mode:
+            Printer.info(msg)
+        if session.listener:
+            session.listener.logger.info(msg)
 
     def close_session(self, session: Session, *, its_manual_kill: bool = False):
         """
@@ -196,11 +205,13 @@ class Project94:
         :param session: `Session` to close
         :param its_manual_kill: Write a message that the session was interrupted manually or died by them
         """
+        msg = f"{session} {'seems killed' if its_manual_kill else 'seems dead'}"
         self.__epoll.unregister(session.socket.fileno())
         if self.active_session is session:
             self.active_session = None
         if (listener := session.listener) and session.socket in listener.sockets:
             listener.sockets.remove(session.socket)
+            listener.logger.warning(msg)
         if session.hash in self.sessions:
             self.sessions.pop(session.hash)
         try:
@@ -208,11 +219,8 @@ class Project94:
             session.socket.close()
         except (socket.error, OSError):
             pass
-
-        if its_manual_kill:
-            Printer.warning(f"{str(session)} killed")
-        else:
-            Printer.warning(f"{str(session)} dead")
+        if not self.shell_mode:
+            Printer.warning(msg)
 
     def register_listener(self, listener: Listener):
         # TODO: Error handling?

@@ -121,7 +121,7 @@ class ListenerCmd(Command):
 
     def status(self, args):
         if listener := self.app.get_listener(listener_id=args.listener_name):
-            print_listener(listener)
+            print_listener(listener, args.verbose)
         else:
             Printer.warning(f"Listener \"{args.listener_name}\" not found")
 
