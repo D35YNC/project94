@@ -1,6 +1,6 @@
 #!/usr/bin/python3
 
-import project94
+from project94.__main__ import entry
 
 if __name__ == '__main__':
-    project94.entry()
+    entry()

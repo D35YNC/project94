@@ -7,7 +7,7 @@ from project94.utils.banners import get_banner
 def entry():
     import argparse
 
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser("project94")
     parser.add_argument("-V", "--version",
                         action='version',
                         version=f"%(prog)s v{__version__}")
