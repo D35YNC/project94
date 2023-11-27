@@ -18,7 +18,7 @@ from project94.utils.networking import recvall
 from project94.utils.printer import Printer
 
 
-__version__ = '1.2.dev'
+__version__ = '1.2'
 
 
 class Project94:
