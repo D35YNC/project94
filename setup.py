@@ -1,11 +1,11 @@
 #!/usr/bin/python3
 
 from setuptools import setup, find_packages
-import project94
+from project94.project94 import __version__
 
 if __name__ == '__main__':
     setup(name="project94",
-          version=project94.__version__,
+          version=__version__,
           description="Reverse shell manager",
           long_description=open("./README.md", 'r').read(),
           long_description_content_type="text/markdown",
@@ -20,4 +20,4 @@ if __name__ == '__main__':
           python_requires=">=3.10",
           packages=find_packages(),
           install_requires=[line.strip() for line in open("./requirements.txt", "r").readlines()],
-          entry_points={'console_scripts': ['project94 = project94:entry']})
+          entry_points={'console_scripts': ['project94 = project94.__main__:entry']})
