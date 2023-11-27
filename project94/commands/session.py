@@ -101,7 +101,7 @@ class SessionCmd(Command):
             while not session.recv_data.empty():
                 print(session.recv_data.get_nowait(), end='')
             print('-' * 10)
-            session.shell_mode = True
+            self.app.shell_mode = True
 
         session_id = args.session_id
         if session_id:

@@ -12,14 +12,14 @@ def create_session_hash(host, port) -> str:
     return hashlib.sha256(f"{host}:{port}".encode()).hexdigest()
 
 
-def recvall(socket_fd: socket.socket) -> bytes:
+def recvall(sock: socket.socket) -> bytes:
     data = b""
-    size = 0x100
+    size = 1024
     while True:
         try:
-            r = socket_fd.recv(size)
+            r = sock.recv(size)
         except (OSError, socket.error):
-            return bytes()
+            return data
         else:
             if not r:
                 break
