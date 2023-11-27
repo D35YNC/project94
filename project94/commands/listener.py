@@ -101,21 +101,16 @@ class ListenerCmd(Command):
         if ssl_required:
             listener.setup_ssl()
             if args.ssl_cafile:
-                try:
-                    listener.load_ca(args.ssl_cafile)
-                except Exception as ex:
-                    Printer.error(str(ex))
-                else:
+                if listener.load_ca(args.ssl_cafile):
                     Printer.success("Ca OK")
-            if args.certfile:
-                try:
-                    listener.load_cert(args.certfile, args.keyfile if args.keyfile else None)
-                except Exception as ex:
-                    Printer.error(str(ex))
                 else:
-                    Printer.success("Cert OK")
-        else:
-            listener.setup(False, True)
+                    Printer.error("Cant load cafile")
+
+            if args.ssl_certfile:
+                if listener.load_cert(args.ssl_certfile, args.ssl_keyfile if args.ssl_keyfile else None):
+                    Printer.success("Cert/key OK")
+                else:
+                    Printer.error("Cant load certfile or keyfile")
         Printer.info(f"{listener} created")
         self.app.listeners.append(listener)
 
