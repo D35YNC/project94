@@ -18,8 +18,6 @@ class Session:
         self.__timestamp = time.time()
 
         self.recv_data = queue.Queue()
-        self.shell_mode = False
-        self.extended_info = {}
 
     @property
     def socket(self) -> socket.socket | ssl.SSLSocket:

@@ -30,6 +30,7 @@ class Project94:
 
         self.listeners: list[Listener] = []
         self.sessions: dict[str, Session] = {}
+        self.shell_mode = False
         self.__active_session: Session = None
         self.__epoll = select.epoll()
 
@@ -108,7 +109,7 @@ class Project94:
                             Printer.error("Cant decode session output. Check&change encoding.")
                             self.__restore_prompt()
                         else:
-                            if session.shell_mode:
+                            if session is self.active_session and self.shell_mode:
                                 print(data, end='')
                             else:
                                 session.recv_data.put_nowait(data)
@@ -142,37 +143,35 @@ class Project94:
 
         while not self.EXIT.is_set():
             try:
-                command = input(self.context)
+                raw_command = input(self.context)
             except EOFError:
                 self.shutdown()
                 break
 
-            command = command.strip().split(' ')
-            if self.active_session and self.active_session.shell_mode:
-                if command[0] == "exit":
-                    self.active_session.shell_mode = False
-                else:
-                    try:
-                        self.active_session.socket.send((" ".join(command) + "\n").encode(self.active_session.encoding))
-                    except (socket.error, OSError):
-                        self.close_session(self.active_session)
-                        self.__restore_prompt()
-            elif command[0] in self.commands:
-                cmd = command[0]
-                args = command[1:]
+            cmd, *args = raw_command.strip().split(' ')
+            if self.shell_mode and cmd == "exit":
+                self.shell_mode = False
+                continue
+
+            if cmd in self.commands:
                 try:
                     self.commands[cmd](args)
                 except SystemExit:
                     pass
                 except argparse.ArgumentError:
                     print(self.commands[cmd].usage)
-                except Exception as error:
-                    Printer.error(f"{cmd}; ERR:{error}; ARGS:{args}")
-                    # self.modules[cmd].module.on_command_error(error, cmd, args)
-            elif command[0].strip() == '':
+                except Exception as ex:
+                    Printer.error(f"{cmd}; ERR:{ex}; ARGS:{args}")
+            elif self.active_session and self.shell_mode:
+                try:
+                    self.active_session.socket.send(f"{raw_command}\n".encode(self.active_session.encoding))
+                except (socket.error, OSError):
+                    self.close_session(self.active_session)
+                    self.__restore_prompt()
+            elif cmd.strip() == '':
                 pass
             else:
-                Printer.error(f"Unknown command")
+                Printer.error(f"Unknown command {cmd}")
 
     def register_session(self, session: Session):
         session_addr = session.socket.getpeername()
@@ -278,6 +277,7 @@ class Project94:
             self.__active_session = value
         else:
             self.__active_session = None
+        self.shell_mode = None
 
     @property
     def context(self):
@@ -285,13 +285,12 @@ class Project94:
         :return: Current session context `[rhost:rport]`
         """
         if self.active_session:
-            if self.active_session.shell_mode:
+            if self.shell_mode:
                 return "\n"
             else:
                 return f"{Printer.context(f'{self.active_session.rhost}:{self.active_session.rport}')}>> "
         else:
             return f"{Printer.context('PROJECT94')}>> "
-
 
     def shutdown(self, *args):
         """Gracefully exit"""
