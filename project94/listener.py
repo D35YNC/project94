@@ -8,9 +8,8 @@ from project94.utils.logs import create_full_logger
 
 class ListenerStateEnum(enum.Enum):
     Unknown = -1,
-    Ready = 0,
-    Running = 1,
-    Stopped = 2,
+    Stopped = 0,
+    Running = 1
 
 
 class ListenerState(metaclass=abc.ABCMeta):
@@ -42,19 +41,11 @@ class Running(ListenerState):
     def stop(self):
         self._listener.listen_socket.shutdown(socket.SHUT_RDWR)
         self._listener.listen_socket.close()
-        self._listener.change_state(ListenerStateEnum.Ready)
+        self._listener.change_state(ListenerStateEnum.Stopped)
 
 
 class Stopped(ListenerState):
     def start(self):
-        raise ListenerStartError(f"{self._listener} is not ready to start")
-
-    def stop(self):
-        raise ListenerStopError(f"{self._listener} is not running")
-
-
-class Ready(ListenerState):
-    def start(self) -> socket.socket | None:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         try:
@@ -75,7 +66,7 @@ class Unknown(ListenerState):
         raise ListenerStartError(f"{self._listener} need setup")
 
     def stop(self):
-        ListenerStopError(f"{self._listener} need setup")
+        raise ListenerStopError(f"{self._listener} is not running")
 
 
 class Listener:
@@ -92,8 +83,7 @@ class Listener:
         self.__lport = port
         self.__logger = create_full_logger(self.__name)
 
-        self.__states = {ListenerStateEnum.Ready: Ready(self, ListenerStateEnum.Ready),
-                         ListenerStateEnum.Running: Running(self, ListenerStateEnum.Running),
+        self.__states = {ListenerStateEnum.Running: Running(self, ListenerStateEnum.Running),
                          ListenerStateEnum.Stopped: Stopped(self, ListenerStateEnum.Stopped),
                          ListenerStateEnum.Unknown: Unknown(self, ListenerStateEnum.Unknown)}
         self.__state = self.__states[ListenerStateEnum.Unknown]
@@ -136,7 +126,7 @@ class Listener:
                 self.__ca.append(cafile)
 
                 if 0 < len(self.__ca) and 0 < len(self.__cert) and self.__state.enum_obj is not ListenerStateEnum.Running:
-                    self.__state = self.__states[ListenerStateEnum.Ready]
+                    self.__state = self.__states[ListenerStateEnum.Stopped]
                 return True
         return None
 
@@ -150,7 +140,7 @@ class Listener:
                 self.__cert.append((certfile, keyfile))
 
                 if 0 < len(self.__ca) and 0 < len(self.__cert) and self.__state.enum_obj is not ListenerStateEnum.Running:
-                    self.__state = self.__states[ListenerStateEnum.Ready]
+                    self.__state = self.__states[ListenerStateEnum.Stopped]
                 return True
         return None
 
