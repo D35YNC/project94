@@ -103,7 +103,7 @@ class Listener:
 
         self.__logger.info(f"Seems initialized: {self} {self.state}")
 
-    def load_ca(self, cafile) -> bool | None:
+    def load_ca(self, cafile: str) -> bool | None:
         if self.ssl_enabled:
             try:
                 self.__ssl_context.load_verify_locations(cafile=cafile)
@@ -117,7 +117,7 @@ class Listener:
                 return True
         return None
 
-    def load_cert(self, certfile, keyfile=None) -> bool | None:
+    def load_cert(self, certfile: str, keyfile: str = None) -> bool | None:
         if self.ssl_enabled:
             try:
                 self.__ssl_context.load_cert_chain(certfile, keyfile)
@@ -131,17 +131,17 @@ class Listener:
                 return True
         return None
 
-    def start(self):
+    def start(self) -> None:
         self.__socket = self.__state.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self.__state.stop()
 
     def restart(self) -> socket.socket | None:
         self.stop()
         return self.start()
 
-    def change_state(self, new_state: ListenerStateEnum):
+    def change_state(self, new_state: ListenerStateEnum) -> None:
         if new_state in self.__states:
             self.__state = self.__states[new_state]
 
@@ -154,7 +154,7 @@ class Listener:
         return self.__logger
 
     @property
-    def is_running(self):
+    def is_running(self) -> bool:
         return self.__state is self.__states[ListenerStateEnum.Running] and self.__socket is not None
 
     @property
@@ -166,7 +166,7 @@ class Listener:
         return self.__accepted_sockets
 
     @property
-    def name(self):
+    def name(self) -> str:
         return self.__name
 
     @property
@@ -186,23 +186,23 @@ class Listener:
         return self.__ssl_context is not None
 
     @property
-    def ssl_context(self):
+    def ssl_context(self) -> ssl.SSLContext:
         return self.__ssl_context
 
     @property
-    def drop_duplicates(self):
+    def drop_duplicates(self) -> bool:
         return self.__drop_duplicates
 
     @drop_duplicates.setter
-    def drop_duplicates(self, value):
+    def drop_duplicates(self, value) -> None:
         self.__drop_duplicates = bool(value)
 
     @property
-    def autorun(self):
+    def autorun(self) -> bool:
         return self.__autorun
 
     @autorun.setter
-    def autorun(self, value):
+    def autorun(self, value) -> None:
         self.__autorun = bool(value)
 
     def to_dict(self) -> dict:
@@ -232,7 +232,7 @@ class Listener:
                 listener.load_cert(cert[0], cert[1])
         return listener
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.name} <{self.lhost}:{self.lport}>"
 
 
