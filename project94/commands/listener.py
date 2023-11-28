@@ -88,18 +88,21 @@ class ListenerCmd(Command):
         name = args.name
         lhost = args.lhost
         lport = args.lport
-        ssl_required = args.enable_ssl
+        enable_ssl = args.enable_ssl
         drop_duplicates = args.drop_duplicates
         autorun = args.autorun
         try:
-            listener = Listener(name, lhost, lport)
-            listener.setup(autorun, drop_duplicates, ssl_required)
+            listener = Listener(name=name,
+                                lhost=lhost,
+                                lport=lport,
+                                autorun=autorun,
+                                drop_duplicates=drop_duplicates,
+                                enable_ssl=enable_ssl)
         except Exception as ex:
             Printer.error(str(ex))
             return
 
-        if ssl_required:
-            listener.setup_ssl()
+        if enable_ssl:
             if args.ssl_cafile:
                 if listener.load_ca(args.ssl_cafile):
                     Printer.success("Ca OK")

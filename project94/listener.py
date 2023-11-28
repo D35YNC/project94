@@ -70,51 +70,38 @@ class Unknown(ListenerState):
 
 
 class Listener:
-    def __init__(self, name: str, ip: str, port: int):
+    def __init__(self, name: str, lhost: str, lport: int, autorun: bool = False, drop_duplicates: bool = True, enable_ssl: bool = False):
         if name.strip() == "" or ' ' in name:
             raise ValueError(f"Listener name '{name}' is incorrect")
-        if not isinstance(port, int):
+        if not isinstance(lport, int):
             raise ValueError("Port is not int")
-        elif not (0 < port < 0xFFFF):
+        elif not (0 < lport < 0xFFFF):
             raise ValueError("Port is not in range 0-65535")
 
         self.__name = name
-        self.__lhost = ip
-        self.__lport = port
+        self.__lhost = lhost
+        self.__lport = lport
+        self.__socket: socket.socket = None
+        self.__accepted_sockets = []
+        self.__ssl_context: ssl.SSLContext = None
+        self.__ca = []
+        self.__cert = []
+        self.__autorun = autorun
+        self.__drop_duplicates = drop_duplicates
         self.__logger = create_full_logger(self.__name)
-
         self.__states = {ListenerStateEnum.Running: Running(self, ListenerStateEnum.Running),
                          ListenerStateEnum.Stopped: Stopped(self, ListenerStateEnum.Stopped),
                          ListenerStateEnum.Unknown: Unknown(self, ListenerStateEnum.Unknown)}
-        self.__state = self.__states[ListenerStateEnum.Unknown]
-        self.__ssl_context: ssl.SSLContext = None
-        self.__socket: socket.socket = None
-        self.__accepted_sockets = []
+        if enable_ssl:
+            self.__state = self.__states[ListenerStateEnum.Unknown]
+            self.__ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
+            self.__ssl_context.verify_mode = ssl.VerifyMode.CERT_REQUIRED
+            self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
+            self.__logger.info(f"SSL context created")
+        else:
+            self.__state = self.__states[ListenerStateEnum.Stopped]
 
-        self.__ca = []
-        self.__cert = []
-
-        self.__autorun = False
-        self.__drop_duplicates = True
         self.__logger.info(f"Seems initialized: {self} {self.state}")
-
-    def setup(self, autorun: bool, drop_duplicates: bool, ssl_enabled: bool = False):
-        if self.__state is not self.__states[ListenerStateEnum.Unknown]:
-            return
-        
-        self.__autorun = autorun
-        self.__drop_duplicates = drop_duplicates
-
-        if not ssl_enabled:
-            self.__state = self.__states[ListenerStateEnum.Ready]
-
-        self.__logger.info(f"Setup completed: {self.state}")
-
-    def setup_ssl(self):
-        self.__ssl_context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
-        self.__ssl_context.verify_mode = ssl.VerifyMode.CERT_REQUIRED
-        self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
-        self.__logger.info(f"SSL context created")
 
     def load_ca(self, cafile) -> bool | None:
         if self.ssl_enabled:
@@ -221,8 +208,8 @@ class Listener:
     def to_dict(self) -> dict:
         return {
             "name": self.name,
-            "ip": self.lhost,
-            "port": self.lport,
+            "lhost": self.lhost,
+            "lport": self.lport,
             "ssl": self.ssl_enabled,
             "ca": self.__ca,
             "cert": self.__cert,
@@ -232,11 +219,13 @@ class Listener:
 
     @staticmethod
     def from_dict(config: dict):
-        listener = Listener(config.get("name", ""), config.get("ip", "0.0.0.0"), config.get("port", 1337))
-        listener.setup(config.get("autorun", False), config.get("drop_duplicates", True),
-                       config.get("ssl", False))
+        listener = Listener(name=config.get("name", ""),
+                            lhost=config.get("lhost", "0.0.0.0"),
+                            lport=config.get("lport", 1337),
+                            autorun=config.get("autorun", False),
+                            drop_duplicates=config.get("drop_duplicates", True),
+                            enable_ssl=config.get("ssl", False))
         if config.get("ssl"):
-            listener.setup_ssl()
             for ca in config.get("ca", []):
                 listener.load_ca(ca)
             for cert in config.get("cert", []):
