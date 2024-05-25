@@ -56,12 +56,12 @@ class Session:
         return isinstance(self.__socket, ssl.SSLSocket)
 
     @property
-    def cert(self) -> dict:
+    def cert(self) -> dict | None:
         """
         Alias for SSLSocket.getpeercert()
         :return: `dict` that contain certificate
         """
-        return self.socket.getpeercert()
+        return self.socket.getpeercert() if self.ssl_enabled else None
 
     @property
     def hash(self) -> str:
