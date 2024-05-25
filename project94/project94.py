@@ -164,7 +164,7 @@ class Project94:
                 except argparse.ArgumentError:
                     print(self.commands[cmd].usage)
                 except Exception as ex:
-                    Printer.error(f"{cmd}; ERR:{ex}; ARGS:{args}")
+                    Printer.error(f"{raw_command} ERROR:\n{ex}")
             elif self.active_session and self.shell_mode:
                 try:
                     self.active_session.socket.send(f"{raw_command}\n".encode(self.active_session.encoding))
