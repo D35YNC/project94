@@ -35,7 +35,14 @@ class ListenerCmd(Command):
         # listener status
         status = self.add_subcommand("status", description="shows status of specified listener", main=self.status)
         status.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        status.add_argument("-V", "--verbose", action="store_true", help="show more information in list mode", default=False)
+        status.add_argument("-v", "--verbose", action="store_true", help="more unnecessary information", default=False)
+
+        # listener logs
+        logs = self.add_subcommand("logs", description="shows logs of specified listener", main=self.logs)
+        logs.add_argument("listener_name", metavar="listener", type=str, help="listener id")
+        logs_flow_control_group = logs.add_mutually_exclusive_group()
+        logs_flow_control_group.add_argument("-H", "--head", type=int, metavar="N", help="first N lines")
+        logs_flow_control_group.add_argument("-T", "--tail", type=int, metavar="N", help="last N lines")
 
         # listener list
         list_ = self.add_subcommand("list", description="shows list of listeners and some information about them", main=self.list)
@@ -58,11 +65,12 @@ class ListenerCmd(Command):
         delete.add_argument("listener_name", metavar="listener", type=str, help="listener id")
 
         # listener ssl
-        ssl_ = self.add_subcommand("ssl", description="ssl management", main=self.ssl)
-        ssl_.add_argument("listener_name", metavar="listener", type=str, help="listener id")
-        ssl_.add_argument("--ssl-cafile", type=str, help="cafile for ssl")
-        ssl_.add_argument("--ssl-certfile", type=str, help="certfile for ssl")
-        ssl_.add_argument("--ssl-keyfile", type=str, help="keyfile for ssl")
+        ssl_ = self.add_subcommand("ssl", description="ssl management")
+        ssl_add = ssl_.add_subcommand("add", description="add ssl certificates", main=self.ssl_add)
+        ssl_add.add_argument("listener_name", metavar="listener", type=str, help="listener id")
+        ssl_add.add_argument("-C", "--cafile", type=str, help="cafile for ssl")
+        ssl_add.add_argument("-c", "--certfile", type=str, help="certfile for ssl")
+        ssl_add.add_argument("-k", "--keyfile", type=str, help="keyfile for ssl")
 
         # listener enable
         enable = self.add_subcommand("enable", description="enable listener autorun", main=self.enable)
@@ -120,6 +128,19 @@ class ListenerCmd(Command):
     def status(self, args):
         if listener := self.app.get_listener(listener_id=args.listener_name):
             print_listener(listener, args.verbose)
+        else:
+            Printer.warning(f"Listener \"{args.listener_name}\" not found")
+
+    def logs(self, args):
+        if listener := self.app.get_listener(listener_id=args.listener_name):
+            if args.head:
+                msgs = listener.log[:args.head]
+            elif args.tail:
+                msgs = listener.log[-args.tail:]
+            else:
+                msgs = listener.log
+            for record in msgs:
+                print(record)
         else:
             Printer.warning(f"Listener \"{args.listener_name}\" not found")
 
@@ -206,7 +227,7 @@ class ListenerCmd(Command):
         else:
             Printer.warning(f"Listener \"{listener_id}\" not found")
 
-    def ssl(self, args):
+    def ssl_add(self, args):
         if args.ssl_keyfile and not args.ssl_certfile:
             self.__parser.error("cant use keyfile without certfile")
             return

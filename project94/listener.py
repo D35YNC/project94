@@ -107,6 +107,8 @@ class Listener:
             self.__ssl_context.verify_mode = ssl.VerifyMode.CERT_REQUIRED
             self.__ssl_context.set_ciphers("ECDHE-RSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-SHA:ECDHE-RSA-AES256-SHA384")
             self.__logger.info(f"SSL context created")
+            self.__logger.debug(f"SSL verify mode: {self.__ssl_context.verify_mode}")
+            self.__logger.debug(f"SSL ciphers: {self.__ssl_context.get_ciphers()}")
         else:
             self.__state = self.__states[ListenerStateId.Stopped]
 
@@ -153,6 +155,36 @@ class Listener:
     def change_state(self, new_state: ListenerStateId) -> None:
         if new_state in self.__states:
             self.__state = self.__states[new_state]
+
+    def to_dict(self) -> dict:
+        return {
+            "name": self.name,
+            "lhost": self.lhost,
+            "lport": self.lport,
+            "ssl": self.ssl_enabled,
+            "ca": self.__ca,
+            "cert": self.__cert,
+            "autorun": self.autorun,
+            "drop_duplicates": self.drop_duplicates,
+        }
+
+    @staticmethod
+    def from_dict(config: dict):
+        listener = Listener(name=config.get("name", ""),
+                            lhost=config.get("lhost", "0.0.0.0"),
+                            lport=config.get("lport", 1337),
+                            autorun=config.get("autorun", False),
+                            drop_duplicates=config.get("drop_duplicates", True),
+                            enable_ssl=config.get("ssl", False))
+        if config.get("ssl"):
+            for ca in config.get("ca", []):
+                listener.load_ca(ca)
+            for cert in config.get("cert", []):
+                listener.load_cert(cert[0], cert[1])
+        return listener
+
+    def __str__(self) -> str:
+        return f"{self.name} <{self.lhost}:{self.lport}>"
 
     @property
     def log(self) -> list[str]:
@@ -213,36 +245,6 @@ class Listener:
     @autorun.setter
     def autorun(self, value) -> None:
         self.__autorun = bool(value)
-
-    def to_dict(self) -> dict:
-        return {
-            "name": self.name,
-            "lhost": self.lhost,
-            "lport": self.lport,
-            "ssl": self.ssl_enabled,
-            "ca": self.__ca,
-            "cert": self.__cert,
-            "autorun": self.autorun,
-            "drop_duplicates": self.drop_duplicates,
-        }
-
-    @staticmethod
-    def from_dict(config: dict):
-        listener = Listener(name=config.get("name", ""),
-                            lhost=config.get("lhost", "0.0.0.0"),
-                            lport=config.get("lport", 1337),
-                            autorun=config.get("autorun", False),
-                            drop_duplicates=config.get("drop_duplicates", True),
-                            enable_ssl=config.get("ssl", False))
-        if config.get("ssl"):
-            for ca in config.get("ca", []):
-                listener.load_ca(ca)
-            for cert in config.get("cert", []):
-                listener.load_cert(cert[0], cert[1])
-        return listener
-
-    def __str__(self) -> str:
-        return f"{self.name} <{self.lhost}:{self.lport}>"
 
 
 class ListenerStartError(Exception):

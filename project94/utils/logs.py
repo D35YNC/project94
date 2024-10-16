@@ -33,3 +33,17 @@ def create_full_logger(name):
     return logger
 
 
+def log2level(lvl):
+    LOG2LEVEL = {"debug": 10,
+                 "info": 20,
+                 "warning": 30,
+                 "error": 40}
+    if isinstance(lvl, int):
+        return logging.getLevelName(lvl).lower()
+    elif isinstance(lvl, str):
+        if lvl := LOG2LEVEL.get(lvl):
+            return lvl
+        else:
+            raise ValueError(f"Expected {list(LOG2LEVEL.keys())} got {lvl}")
+    else:
+        raise ValueError(f"Expected int or str got {type(lvl)}")
